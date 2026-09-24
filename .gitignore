@@ -15,3 +15,5 @@ backups/
 *.db-wal
 *.db-shm
 *.log
+*.swp
+*.swo

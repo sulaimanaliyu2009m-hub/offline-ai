@@ -117,22 +117,15 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 
 Copy the generated value into `.env` as `ADMIN_PASSWORD=your-generated-value`, then restart the server and open `/admin`. Keep `.env`, `chat.db`, and backups private. If the password or computer is lost, an admin password kept only there cannot be recovered; store a secure copy in a password manager. For a hosted HTTPS deployment, set `COOKIE_SECURE=1`, store the admin password in the host's secret settings, and persist the database on protected storage with backups.
 
-GitHub stores the source code; it does not keep this Python server online or provide the dashboard's database. The included Render Blueprint can host a temporary free demo over HTTPS. Its data persistence limits are described below.
+GitHub stores the source code; it does not run this Python server or host its database.
 
 ## Publishing readiness
 
-The repository includes a Render Blueprint for a **free demo**. That demo uses Cloudflare Workers AI for text chat and image features instead of local Ollama. Prompts, attached images, and extracted study text are sent to Cloudflare for model responses. Configure the Cloudflare account ID and API token as private Render environment variables; never add their values to GitHub. Cloudflare's free Workers AI allowance is shared across the account and can be exhausted. See [Workers AI pricing and limits](https://developers.cloudflare.com/workers-ai/platform/pricing/).
+The Python application uses a local SQLite database and Ollama, so it cannot be deployed directly as a Cloudflare Worker. A free global deployment needs a Cloudflare Worker backend with D1 for persistent data and Workers AI for hosted model calls. This requires a backend conversion; the current Python app is still local-only. Cloudflare Free has usage caps: Workers allow 100,000 requests/day; D1 includes 500 MB per database with daily read/write limits; Workers AI includes a shared 10,000-neuron daily allowance. Requests can stop until limits reset. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing and limits](https://developers.cloudflare.com/d1/platform/pricing/), and [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
-The free Render demo sleeps after inactivity and its filesystem is temporary. Chat histories, accounts, admin settings, and generated image files can disappear after a restart, sleep, or redeploy. Signup is disabled by default in Cloudflare mode. PDF summaries need Poppler (`pdftotext`), and local audio transcription needs the optional voice dependencies and model files; these are not installed in the free demo configuration. This setup is for trying the app, not for accounts or data that must persist. A reliable public service needs durable database and file storage, backups, abuse controls, and ongoing provider/host quota management.
+### Cloudflare static preview
 
-### Deploy the free Render demo
-
-1. Rotate any Gmail or Cloudflare credentials that have been shared, then sign in to Render and choose **New → Blueprint**.
-2. Connect the public GitHub repository `sulaimanaliyu2009m-hub/offline-ai` and deploy the Blueprint. Render reads `render.yaml` and asks for `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `ADMIN_PASSWORD` as private values. Use a fresh Workers AI token with AI permissions and a unique admin password of at least 16 characters.
-3. Wait for the deploy to finish, then open the `onrender.com` address shown in the Render dashboard. Use `/admin` for the private owner dashboard.
-4. Keep signup disabled for this temporary demo; the free service does not keep its SQLite data across restarts. Do not store important chats or account data there.
-
-The app uses Render's assigned `PORT`, binds publicly only when hosted, and sets secure cookies in that hosted mode. Local startup remains on `127.0.0.1`. Render documents its [Blueprint deploy flow](https://render.com/docs/blueprint-spec) and [free-service limitations](https://render.com/docs/free).
+The repository includes a Cloudflare Wrangler configuration at `wrangler.jsonc` that points to `cloudflare/public`. This fixes Wrangler's “Could not detect a directory containing static files” deployment error. In the Cloudflare Git integration, use the repository root as the project root, select no framework preset, set the build/deploy command to `npx wrangler deploy`, and leave the output directory empty. This publishes the current interface only. Chat, accounts, history, image generation, and file summarization will not work on the public site until the Python API is ported to a Worker and connected to D1 and Workers AI. Do not advertise the static preview as a working hosted AI service.
 
 ### Publish this source on GitHub
 
@@ -141,7 +134,8 @@ The app uses Render's assigned `PORT`, binds publicly only when hosted, and sets
 
    ```sh
    cd ~/Documents/ChatGPT/v
-   git add .gitignore .env.example Modelfile README.md requirements.txt requirements-voice.txt server.py
+   git add .gitignore .env.example Modelfile README.md requirements.txt requirements-voice.txt server.py cloudflare wrangler.jsonc
+   git add -u render.yaml
    git diff --cached --name-only
    ```
 
