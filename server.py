@@ -54,6 +54,8 @@ def load_local_setting(name):
 
 OLLAMA_MODEL = load_local_setting("OLLAMA_MODEL") or "gemma3:1b"
 OLLAMA_BASE_URL = (load_local_setting("OLLAMA_BASE_URL") or "http://127.0.0.1:11434").rstrip("/")
+AI_PROVIDER = (load_local_setting("AI_PROVIDER") or "ollama").strip().lower()
+CLOUDFLARE_CHAT_MODEL = load_local_setting("CLOUDFLARE_CHAT_MODEL") or "@cf/meta/llama-3.1-8b-instruct"
 
 MANIFEST = json.dumps({
     "name": "Offline AI", "short_name": "Offline AI", "start_url": "/",
@@ -223,7 +225,7 @@ SYSTEM_PROMPT = (
     "Answer the actual question directly, with a short useful response; add detail only when it helps or the user asks. "
     "Ask one brief follow-up question when the request is unclear, incomplete, or has several possible meanings. "
     "Do not guess what a vague phrase means. For example, if the user says only 'what noun', ask what word or sentence they mean. "
-    "Be honest about what you can do: this local text model cannot see or analyze images unless the app explicitly sends an "
+    "Be honest about what you can do: text models cannot see or analyze images unless the app explicitly sends an "
     "attached image to its online vision service. Never claim an image was made, changed, selected, or displayed. "
     "For image creation, explain briefly that the user should open the Image & animation tab. "
     "Do not invent facts, sources, locations, landmarks, or details about people or institutions. If you are unsure, say so plainly "
@@ -261,6 +263,61 @@ def active_model_options():
     except ValueError:
         temperature = 0.7
     return {"num_ctx": min(32768, max(2048, context)), "temperature": min(2.0, max(0.0, temperature))}
+
+
+def generate_ai_answer(messages):
+    """Generate a complete answer with the selected local or hosted text model."""
+    if AI_PROVIDER == "cloudflare":
+        account_id = load_local_setting("CLOUDFLARE_ACCOUNT_ID")
+        api_token = load_local_setting("CLOUDFLARE_API_TOKEN")
+        if not account_id or not api_token:
+            raise RuntimeError("Hosted chat is not configured. Set the Cloudflare account ID and Workers AI token in the server's private settings.")
+        if not re.fullmatch(r"[A-Fa-f0-9]{32}", account_id):
+            raise RuntimeError("The Cloudflare Account ID must contain 32 letters and numbers.")
+        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{CLOUDFLARE_CHAT_MODEL}"
+        payload = json.dumps({
+            "messages": messages,
+            "max_tokens": 1024,
+            "temperature": active_model_options()["temperature"],
+        }).encode("utf-8")
+        request = Request(url, data=payload, headers={
+            "Authorization": "Bearer " + api_token,
+            "Content-Type": "application/json",
+        }, method="POST")
+        try:
+            with urlopen(request, timeout=120) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            if not result.get("success", True):
+                errors = result.get("errors", [])
+                detail = errors[0].get("message", "Cloudflare chat request failed.") if errors else "Cloudflare chat request failed."
+                raise RuntimeError(detail)
+            answer = result.get("result", {}).get("response", "")
+            if not isinstance(answer, str) or not answer.strip():
+                raise RuntimeError("The hosted model returned an empty answer. Try again.")
+            return answer.strip()
+        except HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:800]
+            raise RuntimeError("Cloudflare chat request failed. Check Workers AI model access, daily allowance, and token permissions. " + detail) from error
+        except (URLError, TimeoutError) as error:
+            raise RuntimeError("Could not reach Cloudflare Workers AI. Check the host's internet connection and try again.") from error
+
+    request = Request(
+        OLLAMA_BASE_URL + "/api/chat",
+        data=json.dumps({
+            "model": active_model(),
+            "messages": messages,
+            "options": active_model_options(),
+            "stream": False,
+        }).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlopen(request, timeout=300) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    answer = result.get("message", {}).get("content", "").strip()
+    if not answer:
+        raise RuntimeError("The local model returned an empty answer. Try asking again.")
+    return answer
 
 
 def password_hash(password, salt):
@@ -374,26 +431,10 @@ def summarize_study_material(filename, question, material):
         "Student's request: " + (question or "Summarize this for my exam.") + "\n\n"
         "Study material from " + filename + ":\n" + excerpt + cut_notice
     )
-    request = Request(
-        OLLAMA_BASE_URL + "/api/chat",
-        data=json.dumps({
-            "model": active_model(),
-            "messages": [
-                {"role": "system", "content": active_system_prompt()},
-                {"role": "user", "content": request_text},
-            ],
-            "options": active_model_options(),
-            "stream": False,
-        }).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urlopen(request, timeout=300) as response:
-        result = json.loads(response.read().decode("utf-8"))
-    answer = result.get("message", {}).get("content", "").strip()
-    if not answer:
-        raise RuntimeError("The local model returned an empty summary. Try asking again.")
-    return answer
+    return generate_ai_answer([
+        {"role": "system", "content": active_system_prompt()},
+        {"role": "user", "content": request_text},
+    ])
 
 
 def initialize_database():
@@ -463,7 +504,8 @@ def initialize_database():
         database.execute("CREATE INDEX IF NOT EXISTS auth_attempts_time ON auth_attempts(ip_hash, attempted_at)")
         database.execute("CREATE TABLE IF NOT EXISTS admin_sessions (token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)")
         database.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        database.executemany("INSERT OR IGNORE INTO app_settings(key,value) VALUES(?,?)", (("signup_enabled", "1"), ("daily_image_limit", "30"), ("per_user_image_limit", "2"), ("image_generation_enabled", "1"), ("context_window", "4096"), ("temperature", "0.7")))
+        default_signup = "0" if AI_PROVIDER == "cloudflare" else "1"
+        database.executemany("INSERT OR IGNORE INTO app_settings(key,value) VALUES(?,?)", (("signup_enabled", default_signup), ("daily_image_limit", "5" if AI_PROVIDER == "cloudflare" else "30"), ("per_user_image_limit", "2"), ("image_generation_enabled", "1"), ("context_window", "4096"), ("temperature", "0.7")))
 
 
 PAGE = '''<!doctype html>
@@ -1549,7 +1591,7 @@ class Handler(BaseHTTPRequestHandler):
                     database.execute("DELETE FROM admin_sessions WHERE expires_at<=?", (now,))
                     database.execute("INSERT INTO admin_sessions(token_hash,expires_at) VALUES(?,?)",
                                      (hashlib.sha256(token.encode()).hexdigest(), now + ADMIN_SESSION_SECONDS))
-                secure = "; Secure" if load_local_setting("COOKIE_SECURE") == "1" else ""
+                secure = "; Secure" if load_local_setting("COOKIE_SECURE") == "1" or os.environ.get("PORT") else ""
                 self.pending_admin_cookie = f"{ADMIN_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={ADMIN_SESSION_SECONDS}" + secure
                 self.send_json(200, {"ok": True})
             except (ValueError, json.JSONDecodeError):
@@ -1584,20 +1626,25 @@ class Handler(BaseHTTPRequestHandler):
                 settings = dict(database.execute("SELECT key,value FROM app_settings"))
                 image_bytes = sum(path.stat().st_size for path in GENERATED_DIR.glob("*") if path.is_file()) if GENERATED_DIR.exists() else 0
             model_names = []
-            try:
-                with urlopen(OLLAMA_BASE_URL + "/api/tags", timeout=1.5) as response:
-                    model_payload = json.loads(response.read(1_000_000))
-                    model_names = [item.get("name") for item in model_payload.get("models", []) if isinstance(item, dict) and isinstance(item.get("name"), str)]
-                    ollama_ready = True
-            except Exception:
-                ollama_ready = False
-            services = {
-                "Ollama API reachable": ollama_ready,
+            if AI_PROVIDER == "cloudflare":
+                model_names = [CLOUDFLARE_CHAT_MODEL]
+                cloudflare_ready = bool(load_local_setting("CLOUDFLARE_ACCOUNT_ID") and load_local_setting("CLOUDFLARE_API_TOKEN"))
+                services = {"Cloudflare chat and image credentials configured": cloudflare_ready}
+            else:
+                try:
+                    with urlopen(OLLAMA_BASE_URL + "/api/tags", timeout=1.5) as response:
+                        model_payload = json.loads(response.read(1_000_000))
+                        model_names = [item.get("name") for item in model_payload.get("models", []) if isinstance(item, dict) and isinstance(item.get("name"), str)]
+                        ollama_ready = True
+                except Exception:
+                    ollama_ready = False
+                services = {"Ollama API reachable": ollama_ready}
+            services.update({
                 "Image credentials configured": bool(load_local_setting("CLOUDFLARE_ACCOUNT_ID") and load_local_setting("CLOUDFLARE_API_TOKEN")),
                 "Email settings configured": bool(load_local_setting("SMTP_HOST") and load_local_setting("SMTP_FROM")),
-            }
+            })
             counts["generated image storage (MB)"] = round(image_bytes / (1024 * 1024), 2)
-            self.send_json(200, {"stats": counts, "settings": {"signup_enabled": settings.get("signup_enabled", "1") == "1", "image_generation_enabled": settings.get("image_generation_enabled", "1") == "1", "per_user_image_limit": int(settings.get("per_user_image_limit", str(PER_VISITOR_DAILY_IMAGES))), "daily_image_limit": int(settings.get("daily_image_limit", str(APP_DAILY_IMAGE_LIMIT))), "context_window": int(settings.get("context_window", "4096")), "temperature": float(settings.get("temperature", "0.7")), "model": settings.get("ollama_model", OLLAMA_MODEL), "system_prompt": settings.get("system_prompt", SYSTEM_PROMPT)},
+            self.send_json(200, {"stats": counts, "settings": {"signup_enabled": settings.get("signup_enabled", "0" if AI_PROVIDER == "cloudflare" else "1") == "1", "image_generation_enabled": settings.get("image_generation_enabled", "1") == "1", "per_user_image_limit": int(settings.get("per_user_image_limit", str(PER_VISITOR_DAILY_IMAGES))), "daily_image_limit": int(settings.get("daily_image_limit", "5" if AI_PROVIDER == "cloudflare" else str(APP_DAILY_IMAGE_LIMIT))), "context_window": int(settings.get("context_window", "4096")), "temperature": float(settings.get("temperature", "0.7")), "model": settings.get("ollama_model", CLOUDFLARE_CHAT_MODEL if AI_PROVIDER == "cloudflare" else OLLAMA_MODEL), "system_prompt": settings.get("system_prompt", SYSTEM_PROMPT)},
                                  "services": services, "models": model_names,
                                  "accounts": [{"id": row[0], "contact": row[1], "created_at": datetime.fromtimestamp(row[2], timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "images_today": usage_rows.get("account:" + row[0], 0)} for row in accounts]})
             return
@@ -1780,7 +1827,7 @@ class Handler(BaseHTTPRequestHandler):
                 "INSERT INTO browser_sessions (token_hash, owner_id, expires_at) VALUES (?, ?, ?)",
                 (hashlib.sha256(new_token.encode()).hexdigest(), owner, now + SESSION_SECONDS),
             )
-        secure = "; Secure" if load_local_setting("COOKIE_SECURE") == "1" else ""
+        secure = "; Secure" if load_local_setting("COOKIE_SECURE") == "1" or os.environ.get("PORT") else ""
         self.pending_cookie = (
             f"{SESSION_COOKIE}={new_token}; Path=/; HttpOnly; SameSite=Lax; "
             f"Max-Age={SESSION_SECONDS}" + secure
@@ -2280,44 +2327,55 @@ class Handler(BaseHTTPRequestHandler):
                     "SELECT role, content FROM messages WHERE owner_id=? AND conversation_id=? ORDER BY id DESC LIMIT 20",
                     (self.request_owner, conversation_id),
                 ).fetchall()
-            model_name = active_model()
             conversation = [{"role": "system", "content": active_system_prompt()}] + [
                 {"role": role, "content": content}
                 for role, content in reversed(previous)
             ]
             conversation.append({"role": "user", "content": message})
-
-            ollama_request = Request(
-                OLLAMA_BASE_URL + "/api/chat",
-                data=json.dumps({
-                    "model": model_name,
-                    "messages": conversation,
-                    "options": active_model_options(),
-                    "stream": True,
-                }).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urlopen(ollama_request, timeout=180) as response:
+            if AI_PROVIDER == "cloudflare":
+                answer = generate_ai_answer(conversation)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
                 self.send_header("Cache-Control", "no-cache")
                 self.send_header("Connection", "close")
                 self.end_headers()
                 self.close_connection = True
-
-                answer_parts = []
-                for line in response:
-                    if not line.strip():
-                        continue
-                    part = json.loads(line.decode("utf-8"))
-                    token = part.get("message", {}).get("content", "")
-                    if token:
-                        answer_parts.append(token)
-                        chunk = json.dumps({"token": token}).encode("utf-8") + b"\n"
-                        self.wfile.write(chunk)
-                        self.wfile.flush()
-                answer = "".join(answer_parts)
+                # Cloudflare REST returns a complete answer; emit it in UI-compatible chunks.
+                for offset in range(0, len(answer), 96):
+                    chunk = json.dumps({"token": answer[offset:offset + 96]}).encode("utf-8") + b"\n"
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+            else:
+                ollama_request = Request(
+                    OLLAMA_BASE_URL + "/api/chat",
+                    data=json.dumps({
+                        "model": active_model(),
+                        "messages": conversation,
+                        "options": active_model_options(),
+                        "stream": True,
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(ollama_request, timeout=180) as response:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    self.close_connection = True
+                    answer_parts = []
+                    for line in response:
+                        if not line.strip():
+                            continue
+                        part = json.loads(line.decode("utf-8"))
+                        token = part.get("message", {}).get("content", "")
+                        if token:
+                            answer_parts.append(token)
+                            chunk = json.dumps({"token": token}).encode("utf-8") + b"\n"
+                            self.wfile.write(chunk)
+                            self.wfile.flush()
+                    answer = "".join(answer_parts)
             save_conversation_messages(self.request_owner, conversation_id, message, answer)
             self.wfile.write(b'{"done":true}\n')
             self.wfile.flush()
@@ -2486,15 +2544,19 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     initialize_database()
+    public_host = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
+    requested_port = int(os.environ["PORT"]) if os.environ.get("PORT") else None
+    ports = [requested_port] if requested_port is not None else range(8000, 8011)
     server = None
-    for port in range(8000, 8011):
+    for port in ports:
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            server = ThreadingHTTPServer((public_host, port), Handler)
             break
         except OSError as error:
             if error.errno != errno.EADDRINUSE:
                 raise
     if server is None:
         raise OSError("Ports 8000 through 8010 are all in use. Stop an older server and try again.")
-    print(f"Server running at http://127.0.0.1:{server.server_address[1]}")
+    display_host = "127.0.0.1" if public_host == "127.0.0.1" else "0.0.0.0"
+    print(f"Server running at http://{display_host}:{server.server_address[1]}")
     server.serve_forever()

@@ -54,7 +54,7 @@ Use the **＋** button beside the message box to attach a PNG, JPEG, or WebP ima
 
 ## Summarize study files
 
-Use **＋** to attach one PDF, TXT, Markdown, CSV, DOCX, PPTX, or supported audio file (MP3, M4A, WAV, WebM, OGG, OPUS, FLAC, or AAC), up to 20 MB. Add a request such as “Make exam notes,” or leave it blank for a study guide with a summary, key terms, and practice questions. Text extraction, audio transcription, and the summary run locally; uploaded file contents are not stored in chat history. The app summarizes up to the first 10,000 extracted characters. PDF reading uses Poppler's `pdftotext` program; scanned PDFs without selectable text need OCR before upload.
+Use **＋** to attach one PDF, TXT, Markdown, CSV, DOCX, PPTX, or supported audio file (MP3, M4A, WAV, WebM, OGG, OPUS, FLAC, or AAC), up to 20 MB. Add a request such as “Make exam notes,” or leave it blank for a study guide with a summary, key terms, and practice questions. In local Ollama mode, extraction, audio transcription, and summarization run locally. In public Cloudflare mode, extracted study text is sent to Cloudflare Workers AI for the summary; uploaded file contents are not stored in chat history. The app summarizes up to the first 10,000 extracted characters. PDF reading uses Poppler's `pdftotext` program; scanned PDFs without selectable text need OCR before upload.
 
 ## Optional accounts and guest use
 
@@ -117,11 +117,22 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 
 Copy the generated value into `.env` as `ADMIN_PASSWORD=your-generated-value`, then restart the server and open `/admin`. Keep `.env`, `chat.db`, and backups private. If the password or computer is lost, an admin password kept only there cannot be recovered; store a secure copy in a password manager. For a hosted HTTPS deployment, set `COOKIE_SECURE=1`, store the admin password in the host's secret settings, and persist the database on protected storage with backups.
 
-GitHub stores the source code; it does not keep this Python server online or provide the dashboard's database. The dashboard is remotely reachable only when the app is deployed on an always-on host and its database and secrets are stored there. This prototype still binds to `127.0.0.1`; it is not publicly deployed or ready to expose directly to the internet.
+GitHub stores the source code; it does not keep this Python server online or provide the dashboard's database. The included Render Blueprint can host a temporary free demo over HTTPS. Its data persistence limits are described below.
 
 ## Publishing readiness
 
-The source can be prepared for a public code repository, but this app is not a public hosted service. It uses a single local SQLite database, a local Ollama service, and provider credentials configured by the operator. Public hosting requires an always-on Python host, HTTPS, persistent private storage, production session and cookie settings, secret management, backups, abuse protection, and a plan for image and email service limits. A GitHub repository alone cannot run the server or provide these services. `.env.example` lists setting names only; copy it to `.env` for private local configuration and never commit the real `.env`.
+The repository includes a Render Blueprint for a **free demo**. That demo uses Cloudflare Workers AI for text chat and image features instead of local Ollama. Prompts, attached images, and extracted study text are sent to Cloudflare for model responses. Configure the Cloudflare account ID and API token as private Render environment variables; never add their values to GitHub. Cloudflare's free Workers AI allowance is shared across the account and can be exhausted. See [Workers AI pricing and limits](https://developers.cloudflare.com/workers-ai/platform/pricing/).
+
+The free Render demo sleeps after inactivity and its filesystem is temporary. Chat histories, accounts, admin settings, and generated image files can disappear after a restart, sleep, or redeploy. Signup is disabled by default in Cloudflare mode. PDF summaries need Poppler (`pdftotext`), and local audio transcription needs the optional voice dependencies and model files; these are not installed in the free demo configuration. This setup is for trying the app, not for accounts or data that must persist. A reliable public service needs durable database and file storage, backups, abuse controls, and ongoing provider/host quota management.
+
+### Deploy the free Render demo
+
+1. Rotate any Gmail or Cloudflare credentials that have been shared, then sign in to Render and choose **New → Blueprint**.
+2. Connect the public GitHub repository `sulaimanaliyu2009m-hub/offline-ai` and deploy the Blueprint. Render reads `render.yaml` and asks for `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `ADMIN_PASSWORD` as private values. Use a fresh Workers AI token with AI permissions and a unique admin password of at least 16 characters.
+3. Wait for the deploy to finish, then open the `onrender.com` address shown in the Render dashboard. Use `/admin` for the private owner dashboard.
+4. Keep signup disabled for this temporary demo; the free service does not keep its SQLite data across restarts. Do not store important chats or account data there.
+
+The app uses Render's assigned `PORT`, binds publicly only when hosted, and sets secure cookies in that hosted mode. Local startup remains on `127.0.0.1`. Render documents its [Blueprint deploy flow](https://render.com/docs/blueprint-spec) and [free-service limitations](https://render.com/docs/free).
 
 ### Publish this source on GitHub
 
@@ -151,4 +162,4 @@ There is no license file yet. Before inviting others to reuse, modify, or distri
 
 ## Current scope
 
-This is a personal local prototype. It uses Python's built-in HTTP server and binds to `127.0.0.1`, so it is only reachable from this computer. It must not be exposed directly to the public internet. Public deployment still needs HTTPS, secure production session settings, reliable shared storage, backups, provider-account billing safeguards, and stronger abuse monitoring.
+This remains a prototype. Local mode uses Python's built-in HTTP server bound to `127.0.0.1`. The Render Blueprint exposes a free demo over HTTPS but does not provide durable SQLite storage or production abuse protection.
