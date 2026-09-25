@@ -123,9 +123,13 @@ GitHub stores the source code; it does not run this Python server or host its da
 
 The Python application uses a local SQLite database and Ollama, so it cannot be deployed directly as a Cloudflare Worker. A free global deployment needs a Cloudflare Worker backend with D1 for persistent data and Workers AI for hosted model calls. This requires a backend conversion; the current Python app is still local-only. Cloudflare Free has usage caps: Workers allow 100,000 requests/day; D1 includes 500 MB per database with daily read/write limits; Workers AI includes a shared 10,000-neuron daily allowance. Requests can stop until limits reset. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing and limits](https://developers.cloudflare.com/d1/platform/pricing/), and [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
-### Cloudflare static preview
+### Cloudflare Worker deployment
 
-The repository includes a Cloudflare Wrangler configuration at `wrangler.jsonc` that points to `cloudflare/public`. This fixes Wrangler's “Could not detect a directory containing static files” deployment error. In the Cloudflare Git integration, use the repository root as the project root, select no framework preset, set the build/deploy command to `npx wrangler deploy`, and leave the output directory empty. This publishes the current interface only. Chat, accounts, history, image generation, and file summarization will not work on the public site until the Python API is ported to a Worker and connected to D1 and Workers AI. Do not advertise the static preview as a working hosted AI service.
+The Wrangler config deploys the interface and a Worker backend. Chat, guest conversation history, and D1 persistence use Cloudflare Workers AI and D1. The Worker name must remain `offline-ai`, matching the Cloudflare project. Use the repository root, deploy command `npx wrangler deploy`, and leave the output directory empty.
+
+The D1 database `offline-ai-db` is configured in `wrangler.jsonc` with the `DB` binding and migrations directory. Before guest chat works, apply the schema migration from the project folder with `npx wrangler d1 migrations apply offline-ai-db --remote`. The AI binding is declared in `wrangler.jsonc` as `AI`.
+
+This is the first backend release. Email signup/password reset, image questions and generation, uploaded-file summarization, and voice transcription are not implemented in the Worker yet. The local Python/Ollama app continues to provide those existing local features. Cloudflare Free has usage caps: Workers allow 100,000 requests/day; D1 includes 500 MB per database with daily read/write limits; Workers AI includes a shared 10,000-neuron daily allowance. Requests can stop until limits reset. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing and limits](https://developers.cloudflare.com/d1/platform/pricing/), and [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
 ### Publish this source on GitHub
 

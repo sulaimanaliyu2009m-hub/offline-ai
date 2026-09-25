@@ -2,8 +2,20 @@
   "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
   "name": "offline-ai",
   "compatibility_date": "2026-09-24",
+  "main": "./cloudflare/src/index.js",
+  "ai": { "binding": "AI" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "offline-ai-db",
+      "database_id": "c4f75fb6-bd3d-4c85-9e53-daa4bff93d3f",
+      "migrations_dir": "./cloudflare/migrations"
+    }
+  ],
   "assets": {
     "directory": "./cloudflare/public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
     "not_found_handling": "single-page-application"
   }
 }
