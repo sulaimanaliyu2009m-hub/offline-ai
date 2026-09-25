@@ -198,7 +198,7 @@
     <div class="sidebar-note"><strong>Use it your way</strong>Continue as a guest or create an optional account to keep your chats together.</div>
   </aside>
   <main class="main">
-    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Offline AI</span><span class="model-tag">Cloud AI · online</span></header>
+    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Offline AI</span></header>
     <section class="chat-area" id="chat-area">
       <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><p>Chat, voice, study file summaries, image questions, and image creation. Signup is optional.</p></div>
       <div id="messages" aria-live="polite"></div>
@@ -933,7 +933,7 @@
         recorder.stop();
         voiceButton.disabled = true;
         voiceButton.textContent = '…';
-        voiceStatus.textContent = 'Transcribing locally…';
+        voiceStatus.textContent = 'Transcribing voice…';
         return;
       }
       if (!navigator.mediaDevices || !window.MediaRecorder) {
@@ -982,7 +982,7 @@
           if (recorder && recorder.state === 'recording') {
             recorder.stop();
             voiceButton.disabled = true;
-            voiceStatus.textContent = 'Transcribing locally…';
+            voiceStatus.textContent = 'Transcribing voice…';
           }
         }, 30000);
       } catch (error) {

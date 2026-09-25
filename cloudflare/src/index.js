@@ -1,6 +1,8 @@
 const COOKIE = "offline_ai_guest";
 const MAX_PROMPT_CHARS = 12000;
 const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+const IMAGE_CHAT_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
+const TRANSCRIBE_MODEL = "@cf/openai/whisper-large-v3-turbo";
 const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 const IMAGE_DAILY_PER_GUEST = 2;
 const IMAGE_DAILY_GLOBAL = 30;
@@ -114,13 +116,47 @@ async function routeApi(request, env, owner) {
     return ownerJson({ conversation_id: id, messages: result.results || [] }, owner);
   }
 
+  if (path === "/api/transcribe" && method === "POST") {
+    if (!env.AI) return ownerJson({ error: "Voice transcription is not connected." }, owner, 503);
+    const declaredSize = Number(request.headers.get("content-length") || 0);
+    if (declaredSize > 8 * 1024 * 1024) return ownerJson({ error: "That recording is too large. Record a shorter voice message." }, owner, 413);
+    const audio = await request.arrayBuffer();
+    if (!audio.byteLength) return ownerJson({ error: "The recording is empty. Please try again." }, owner, 400);
+    if (audio.byteLength > 8 * 1024 * 1024) return ownerJson({ error: "That recording is too large. Record a shorter voice message." }, owner, 413);
+    const bytes = new Uint8Array(audio);
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    try {
+      const result = await env.AI.run(TRANSCRIBE_MODEL, { audio: btoa(binary), task: "transcribe" });
+      const text = typeof result?.text === "string" ? result.text.trim() : "";
+      if (!text) return ownerJson({ error: "I couldn't hear clear words in that recording. Please try again." }, owner, 422);
+      return ownerJson({ text, language: result?.transcription_info?.language || "" }, owner);
+    } catch (error) {
+      console.error("Workers AI voice transcription failed", error);
+      return ownerJson({ error: "Voice transcription failed. Please try a shorter recording." }, owner, 502);
+    }
+  }
+
   if (path === "/api/chat" && method === "POST") {
     if (!env.AI) return ownerJson({ error: "Workers AI is not connected. Add the AI binding in Cloudflare settings." }, owner, 503);
     const body = await readJson(request);
+    const imageData = typeof body?.image_data === "string" ? body.image_data : "";
     const message = typeof body?.message === "string" ? body.message.trim() : "";
-    if (!message) return ownerJson({ error: "Type a message first." }, owner, 400);
+    if (!message && !imageData) return ownerJson({ error: "Type a message first." }, owner, 400);
     if (message.length > MAX_PROMPT_CHARS) return ownerJson({ error: "That message is too long. Please keep it under 12,000 characters." }, owner, 413);
-    if (body.image_data) return ownerJson({ error: "Image questions are not connected in this first Cloudflare chat release yet." }, owner, 501);
+    let imageBytes = null;
+    if (imageData) {
+      const match = imageData.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+      if (!match || imageData.length > 6 * 1024 * 1024) return ownerJson({ error: "Attach a PNG, JPEG, or WebP image smaller than 4 MB." }, owner, 400);
+      try {
+        const binaryImage = atob(match[2]);
+        imageBytes = Array.from(binaryImage, (character) => character.charCodeAt(0));
+      } catch {
+        return ownerJson({ error: "That image could not be read. Choose it again and retry." }, owner, 400);
+      }
+    }
 
     let conversationId = typeof body.conversation_id === "string" ? body.conversation_id : "";
     let conversation = conversationId ? await ensureConversation(env.DB, owner.id, conversationId) : null;
@@ -139,21 +175,30 @@ async function routeApi(request, env, owner) {
     const now = Date.now();
     await env.DB.prepare(
       "INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'user', ?, ?)",
-    ).bind(crypto.randomUUID(), conversationId, owner.id, message, now).run();
+    ).bind(crypto.randomUUID(), conversationId, owner.id, imageBytes ? `${message || "What is in this image?"}\n[Image attached]` : message, now).run();
 
     let answer;
     try {
-      const generated = await env.AI.run(MODEL, {
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...history,
-          { role: "user", content: message },
-        ],
-        max_tokens: 700,
-      });
-      answer = typeof generated === "string"
-        ? generated
-        : generated?.response || generated?.result?.response || "I couldn't produce an answer. Please try again.";
+      if (imageBytes) {
+        const generated = await env.AI.run(IMAGE_CHAT_MODEL, {
+          image: imageBytes,
+          prompt: message || "Describe this image and point out its main details.",
+          max_tokens: 600,
+        });
+        answer = generated?.description || generated?.response || generated?.result?.response || "I couldn't analyze that image. Please try another one.";
+      } else {
+        const generated = await env.AI.run(MODEL, {
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            ...history,
+            { role: "user", content: message },
+          ],
+          max_tokens: 700,
+        });
+        answer = typeof generated === "string"
+          ? generated
+          : generated?.response || generated?.result?.response || "I couldn't produce an answer. Please try again.";
+      }
     } catch (error) {
       console.error("Workers AI request failed", error);
       return ownerJson({ error: "The AI request failed. Check the Workers AI binding and try again." }, owner, 502);
