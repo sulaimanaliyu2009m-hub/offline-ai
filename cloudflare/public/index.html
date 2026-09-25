@@ -201,7 +201,7 @@
     <div class="sidebar-note"><strong>Use it your way</strong>Continue as a guest or create an optional account to keep your chats together.</div>
   </aside>
   <main class="main">
-    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Offline AI</span><span class="model-tag">Local chat</span><button class="view-switch" data-view="chat">Chat</button><button class="view-switch" data-view="create">Create</button><button id="account-button" class="account-button">Account</button></header>
+    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Offline AI</span><span class="model-tag">Cloud AI · online</span><button class="view-switch" data-view="chat">Chat</button><button class="view-switch" data-view="create">Create</button><button id="account-button" class="account-button">Account</button></header>
     <section class="chat-area" id="chat-area">
       <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><p>Chat, voice, study file summaries, image questions, and image creation. Signup is optional.</p></div>
       <div id="messages" aria-live="polite"></div>
@@ -374,7 +374,7 @@
       } else {
         selectedChatImageUrl = null;
         attachmentThumbnail.removeAttribute('src');
-        attachmentDescription.textContent = file.name + ' — contents are processed locally for summarization.';
+        attachmentDescription.textContent = file.name + ' — sent online for summarization.';
       }
       attachmentPreview.hidden = false;
       voiceStatus.textContent = '';
@@ -909,8 +909,11 @@
         if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
         await refreshConversationList();
       } catch (error) {
-        if (reply) reply.textContent = 'Error: ' + error.message;
-        else voiceStatus.textContent = error.message;
+        const message = !navigator.onLine || error instanceof TypeError
+          ? 'The public AI needs an internet connection. For offline chat, run Ollama and server.py on this device, then open http://127.0.0.1:8000.'
+          : error.message;
+        if (reply) reply.textContent = 'Error: ' + message;
+        else voiceStatus.textContent = message;
       } finally {
         sendButton.disabled = false;
       }
