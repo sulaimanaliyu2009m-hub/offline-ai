@@ -1,6 +1,6 @@
 const COOKIE = "offline_ai_guest";
 const MAX_PROMPT_CHARS = 12000;
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -147,6 +147,7 @@ async function routeApi(request, env, owner) {
         ? generated
         : generated?.response || generated?.result?.response || "I couldn't produce an answer. Please try again.";
     } catch (error) {
+      console.error("Workers AI request failed", error);
       return ownerJson({ error: "The AI request failed. Check the Workers AI binding and try again." }, owner, 502);
     }
 
