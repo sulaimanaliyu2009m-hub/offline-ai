@@ -1,6 +1,7 @@
 const COOKIE = "offline_ai_guest";
 const MAX_PROMPT_CHARS = 12000;
 const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+const SYSTEM_PROMPT = `You are Offline AI, a helpful conversational AI assistant. Be warm, clear, and direct. Use the recent conversation to understand follow-up messages, including short replies such as "yes", "no", or "why"; connect them to the previous turn instead of treating them as a new conversation. Ask a specific follow-up only when the context still leaves the user's meaning unclear. Do not claim to be a human or to have personal feelings, memories, or lived experiences. If asked who you are, say you are Offline AI, an AI assistant. Do not invent facts; say when you are unsure. Match the user's language and keep the answer concise unless they ask for detail.`;
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -140,7 +141,11 @@ async function routeApi(request, env, owner) {
     let answer;
     try {
       const generated = await env.AI.run(MODEL, {
-        messages: [...history, { role: "user", content: message }],
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...history,
+          { role: "user", content: message },
+        ],
         max_tokens: 700,
       });
       answer = typeof generated === "string"
