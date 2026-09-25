@@ -1,6 +1,9 @@
 const COOKIE = "offline_ai_guest";
 const MAX_PROMPT_CHARS = 12000;
 const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+const IMAGE_DAILY_PER_GUEST = 2;
+const IMAGE_DAILY_GLOBAL = 30;
 const SYSTEM_PROMPT = `You are Offline AI, a helpful conversational AI assistant. Be warm, clear, and direct. Use the recent conversation to understand follow-up messages, including short replies such as "yes", "no", or "why"; connect them to the previous turn instead of treating them as a new conversation. Ask a specific follow-up only when the context still leaves the user's meaning unclear. Do not claim to be a human or to have personal feelings, memories, or lived experiences. If asked who you are, say you are Offline AI, an AI assistant. Do not invent facts; say when you are unsure. Match the user's language and keep the answer concise unless they ask for detail.`;
 
 function json(data, status = 200, headers = {}) {
@@ -173,6 +176,47 @@ async function routeApi(request, env, owner) {
     const headers = new Headers({ "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" });
     if (owner.cookie) headers.append("Set-Cookie", owner.cookie);
     return new Response(stream, { headers });
+  }
+
+  if (path === "/api/generate-image" && method === "POST") {
+    if (!env.AI) return ownerJson({ error: "Workers AI is not connected." }, owner, 503);
+    const body = await readJson(request);
+    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    if (!prompt) return ownerJson({ error: "Write an image description first." }, owner, 400);
+    if (prompt.length > 2048) return ownerJson({ error: "Keep the image description under 2,048 characters." }, owner, 413);
+    if (!env.DB) return ownerJson({ error: "The chat database is not connected yet." }, owner, 503);
+
+    const day = new Date().toISOString().slice(0, 10);
+    const reserve = async (key, cap) => env.DB.prepare(
+      `INSERT INTO image_usage (day, owner_id, count) VALUES (?, ?, 1)
+       ON CONFLICT(day, owner_id) DO UPDATE SET count = count + 1
+       WHERE image_usage.count < ? RETURNING count`,
+    ).bind(day, key, cap).first();
+    const guestReservation = await reserve(owner.id, IMAGE_DAILY_PER_GUEST);
+    if (!guestReservation) {
+      return ownerJson({ error: "You have reached today’s image limit. Please try again tomorrow." }, owner, 429);
+    }
+    const globalReservation = await reserve("__global__", IMAGE_DAILY_GLOBAL);
+    if (!globalReservation) {
+      await env.DB.prepare(
+        "UPDATE image_usage SET count = count - 1 WHERE day = ? AND owner_id = ? AND count > 0",
+      ).bind(day, owner.id).run();
+      return ownerJson({ error: "The shared daily image limit is reached. Please try again tomorrow." }, owner, 429);
+    }
+    try {
+      const generated = await env.AI.run(IMAGE_MODEL, { prompt, steps: 4 });
+      if (typeof generated?.image !== "string" || !generated.image) {
+        throw new Error("The image model returned no image data.");
+      }
+      return ownerJson({ url: `data:image/jpeg;charset=utf-8;base64,${generated.image}` }, owner);
+    } catch (error) {
+      console.error("Workers AI image generation failed", error);
+      await env.DB.batch([
+        env.DB.prepare("UPDATE image_usage SET count = count - 1 WHERE day = ? AND owner_id = ? AND count > 0").bind(day, owner.id),
+        env.DB.prepare("UPDATE image_usage SET count = count - 1 WHERE day = ? AND owner_id = '__global__' AND count > 0").bind(day),
+      ]);
+      return ownerJson({ error: "Image generation failed. Please try again later." }, owner, 502);
+    }
   }
 
   if (path.startsWith("/api/account/") && method === "POST") {
