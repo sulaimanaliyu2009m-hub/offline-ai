@@ -18,8 +18,6 @@
     .sidebar { width: 260px; flex: 0 0 260px; background: var(--sidebar); border-right: 1px solid var(--line); padding: 17px 13px; display: flex; flex-direction: column; overflow-y:auto; }
     .brand { display: flex; align-items: center; gap: 11px; padding: 8px 10px 24px; font-weight: 650; font-size: 17px; letter-spacing:-.35px; }
     .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 12px; color: white; background: linear-gradient(145deg,#6158d0,#8c73dc 64%,#b97bbd); font-size: 16px; box-shadow:0 5px 12px #7469cf33; }
-    .sidebar-note { margin-top: auto; padding: 13px 12px; border: 1px solid #e6e6ec; border-radius: 14px; color: #686a77; font-size: 12px; line-height: 1.55; background:#ffffff91; }
-    .sidebar-note strong { display: block; color: #343541; font-size: 13px; margin-bottom: 2px; }
     .side-label { padding:4px 10px 7px; color:#898a96; font-size:11px; font-weight:650; letter-spacing:.08em; text-transform:uppercase; }
     .nav-button { width: 100%; margin: 3px 0; padding: 11px 12px; border: 1px solid transparent; border-radius: 11px; text-align: left; background: transparent; color: #444653; cursor: pointer; transition:background .15s,border .15s,transform .15s; }
     .nav-button:hover { background:#ffffffa6; }
@@ -70,7 +68,6 @@
     #chat button.voice { background: #f1f1f1; color: #333; font-size: 16px; }
     #chat button.voice.recording { background: #c0392b; color: white; }
     #chat button:disabled { background: #bfc0c5; cursor: wait; }
-    .disclaimer { width: min(100%, 770px); margin: 9px auto 0; text-align: center; color: #92949a; font-size: 11px; }
     #create-panel { display:none; width:min(100%, 940px); margin: auto; padding:34px 30px 46px; overflow:auto; }
     #create-panel h1 { font-size:clamp(27px,4vw,35px); letter-spacing:-1px; margin:0 0 8px; }
     #create-panel p { color:#777980; font-size:13px; line-height:1.5; }
@@ -83,8 +80,6 @@
     .create-card button:disabled { opacity:.55; cursor:wait; }
     .create-result { margin-top:14px; white-space:pre-wrap; overflow-wrap:anywhere; }
     .create-result img, .create-result video { display:block; max-width:100%; max-height:440px; margin-top:12px; border-radius:12px; }
-    .online-notice { padding:12px 14px; background:#f4f2fb; border:1px solid #ece8f7; border-radius:12px; }
-    .online-notice { color:#666; font-size:12px; }
     #account-dialog { width:min(460px, calc(100vw - 28px)); border:1px solid #e6e8f0; border-radius:24px; padding:30px; box-shadow:0 28px 90px #161b352e; color:#202334; background:linear-gradient(145deg,#fff 0%,#fbfbff 100%); }
     #account-dialog::backdrop { background:#15192dcc; backdrop-filter:blur(5px); }
     #account-dialog h2 { margin:6px 0 7px; font-size:25px; letter-spacing:-.6px; }
@@ -152,11 +147,10 @@
     :root[data-theme="dark"] .sidebar,:root[data-theme="dark"] .topbar { background:#19191e; border-color:#373741; color:#e8e8ee; }
     :root[data-theme="dark"] .nav-button,:root[data-theme="dark"] .history-item { color:#d0d0d8; }
     :root[data-theme="dark"] .nav-button:hover,:root[data-theme="dark"] .history-item:hover,:root[data-theme="dark"] .history-item.selected,:root[data-theme="dark"] .nav-button.history-active,:root[data-theme="dark"] .new-chat-button { background:#30303a; color:#9ad9cf; border-color:#464650; }
-    :root[data-theme="dark"] .sidebar-note,:root[data-theme="dark"] .create-card,:root[data-theme="dark"] .settings-card,:root[data-theme="dark"] #chat { background:#292930; border-color:#3c3c46; color:#e8e8ee; }
-    :root[data-theme="dark"] .sidebar-note strong,:root[data-theme="dark"] .welcome h1,:root[data-theme="dark"] .create-card h2,:root[data-theme="dark"] .settings-card h2 { color:#f1f1f5; }
+    :root[data-theme="dark"] .create-card,:root[data-theme="dark"] .settings-card,:root[data-theme="dark"] #chat { background:#292930; border-color:#3c3c46; color:#e8e8ee; }
+    :root[data-theme="dark"] .welcome h1,:root[data-theme="dark"] .create-card h2,:root[data-theme="dark"] .settings-card h2 { color:#f1f1f5; }
     :root[data-theme="dark"] .create-card textarea,:root[data-theme="dark"] .create-card input[type=file],:root[data-theme="dark"] .create-card select,:root[data-theme="dark"] .settings-card select,:root[data-theme="dark"] #prompt { background:#222228; color:#f1f1f5; border-color:#464650; }
     :root[data-theme="dark"] .tool-tabs,:root[data-theme="dark"] .tool-tab.active,:root[data-theme="dark"] .prompt-chip { background:#30303a !important; color:#e8e8ee !important; border-color:#464650 !important; }
-    :root[data-theme="dark"] .online-notice { background:#302f3a; border-color:#454352; color:#d0cedc; }
     :root[data-theme="dark"] .settings-actions button,:root[data-theme="dark"] .accent-choice { background:#292930; color:#eee; border-color:#464650; }
     :root[data-theme="dark"] #account-dialog { background:#222228; color:#eee; border-color:#41414b; }
     :root[data-theme="dark"] #account-dialog input:not([type=checkbox]) { background:#19191e; color:#eee; border-color:#464650; }
@@ -195,19 +189,16 @@
     <button class="nav-button" id="settings-tab">⚙ &nbsp; Settings</button>
     <button class="nav-button" id="install-app" hidden>⇩ &nbsp; Install app</button>
     <button class="nav-button account-button" id="account-button">♙ &nbsp; Account</button>
-    <div class="sidebar-note"><strong>Use it your way</strong>Continue as a guest or create an optional account to keep your chats together.</div>
   </aside>
   <main class="main">
     <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Offline AI</span></header>
     <section class="chat-area" id="chat-area">
-      <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><p>Chat, voice, study file summaries, image questions, and image creation. Signup is optional.</p></div>
+      <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1></div>
       <div id="messages" aria-live="polite"></div>
     </section>
     <section id="create-panel">
       <div class="create-header"><h1>Create images and animations</h1>
-      <p>Turn an idea into an image or add gentle motion to a picture.</p>
-      <div class="tool-tabs" role="tablist" aria-label="Creation tools"><button class="tool-tab active" type="button" role="tab" aria-selected="true" data-create-tool="image">Create image</button><button class="tool-tab" type="button" role="tab" aria-selected="false" data-create-tool="motion">Animate image</button></div>
-      <p class="online-notice">Image generation runs online with a shared free daily allowance. No personal API key is needed.</p></div>
+      <div class="tool-tabs" role="tablist" aria-label="Creation tools"><button class="tool-tab active" type="button" role="tab" aria-selected="true" data-create-tool="image">Create image</button><button class="tool-tab" type="button" role="tab" aria-selected="false" data-create-tool="motion">Animate image</button></div></div>
       <div class="create-workspace" id="image-tool">
       <div class="create-card">
         <h2>Generate an image</h2>
@@ -220,7 +211,6 @@
       <div class="create-workspace" id="motion-tool" hidden>
       <div class="create-card">
         <h2>Make a free motion clip</h2>
-        <p>This makes a simple pan or zoom clip from your still image in this browser. It does not invent new movement like an AI video model. Your image stays on this computer.</p>
         <label for="animation-file">Choose an image (PNG, JPEG, or WebP; up to 8 MB)</label>
         <input id="animation-file" type="file" accept="image/png,image/jpeg,image/webp">
         <label for="motion-style">Motion</label>
@@ -230,24 +220,24 @@
       </div>
     </section>
     <section id="settings-panel" aria-labelledby="settings-heading">
-      <h1 id="settings-heading">Settings</h1><p>Personalize how Offline AI looks and behaves on this device.</p>
-      <div class="settings-card"><h2>Appearance</h2><p>Choose the look and color you prefer.</p>
+      <h1 id="settings-heading">Settings</h1>
+      <div class="settings-card"><h2>Appearance</h2>
         <label for="theme-setting">Theme</label><select id="theme-setting"><option value="system">Use device setting</option><option value="light">Light</option><option value="dark">Dark</option></select>
         <label style="display:block;margin:16px 0 9px">Accent color</label><div class="accent-options" role="group" aria-label="Accent color"><button class="accent-choice" type="button" data-accent-choice="violet" aria-pressed="true"><span class="accent-dot" style="--choice:#6258c9"></span>Violet</button><button class="accent-choice" type="button" data-accent-choice="teal" aria-pressed="false"><span class="accent-dot" style="--choice:#287d72"></span>Teal</button><button class="accent-choice" type="button" data-accent-choice="blue" aria-pressed="false"><span class="accent-dot" style="--choice:#3474c5"></span>Blue</button><button class="accent-choice" type="button" data-accent-choice="rose" aria-pressed="false"><span class="accent-dot" style="--choice:#b95177"></span>Rose</button></div>
         <label for="text-size-setting" style="display:block;margin:16px 0 8px">Chat text size</label><select id="text-size-setting"><option value="standard">Standard</option><option value="large">Large</option></select>
       </div>
-      <div class="settings-card"><h2>Chat and voice</h2><p>These choices are saved in this browser.</p>
+      <div class="settings-card"><h2>Chat and voice</h2>
         <label class="setting-line"><input id="enter-to-send-setting" type="checkbox"> Press Enter to send (Shift+Enter makes a new line)</label>
         <label class="setting-line"><input id="speak-setting" type="checkbox"> Speak replies aloud automatically</label>
         <label class="setting-line"><input id="reduced-motion-setting" type="checkbox"> Reduce animations</label>
       </div>
-      <div class="settings-card"><h2>Your conversations</h2><p>Export a copy of saved conversations as a JSON file, or delete the currently open conversation.</p><div class="settings-actions"><button type="button" id="export-chats">Export conversations</button><button type="button" class="danger-action" id="delete-current-chat">Delete current chat</button><button type="button" id="reset-settings">Reset preferences</button></div><p id="settings-status" role="status" aria-live="polite"></p></div>
+      <div class="settings-card"><h2>Your conversations</h2><div class="settings-actions"><button type="button" id="export-chats">Export conversations</button><button type="button" class="danger-action" id="delete-current-chat">Delete current chat</button><button type="button" id="reset-settings">Reset preferences</button></div><p id="settings-status" role="status" aria-live="polite"></p></div>
     </section>
     <dialog id="account-dialog">
       <button class="account-close" id="account-close" aria-label="Close">×</button>
       <div class="account-mark" aria-hidden="true">✳</div>
       <h2 id="account-heading">Welcome back</h2>
-      <p id="account-details">Sign in to keep your chats connected across your devices.</p>
+      <p id="account-details" hidden></p>
       <p id="account-status" hidden>You are using Offline AI as a guest. All features are available without signing up.</p>
       <div class="account-tabs" id="account-tabs" role="tablist" aria-label="Account access"><button id="mode-login" class="active" type="button" role="tab" aria-selected="true">Sign in</button><button id="mode-signup" type="button" role="tab" aria-selected="false">Create account</button></div>
       <form id="account-form">
@@ -262,7 +252,6 @@
       </form>
       <button id="sign-out" class="account-primary" type="button" hidden>Sign out</button>
       <button id="continue-guest" class="account-guest" type="button">Continue as guest</button>
-      <p class="account-foot">Your account is optional. Guest mode keeps all features available.</p>
     </dialog>
     <div class="composer-wrap">
       <p id="voice-status" role="status" aria-live="polite"></p>
@@ -367,11 +356,11 @@
       if (imageFile) {
         selectedChatImageUrl = URL.createObjectURL(file);
         attachmentThumbnail.src = selectedChatImageUrl;
-        attachmentDescription.textContent = file.name + ' — sent to Cloudflare online for image analysis.';
+        attachmentDescription.textContent = file.name;
       } else {
         selectedChatImageUrl = null;
         attachmentThumbnail.removeAttribute('src');
-        attachmentDescription.textContent = file.name + ' — sent online for summarization.';
+        attachmentDescription.textContent = file.name;
       }
       attachmentPreview.hidden = false;
       voiceStatus.textContent = '';
@@ -655,7 +644,6 @@
     document.querySelector('#generate-image').addEventListener('click', event => {
       const prompt = document.querySelector('#image-prompt').value.trim();
       if (!prompt) { document.querySelector('#image-result').textContent = 'Write an image description first.'; return; }
-      if (!confirm('Send this prompt to the online image service? It uses the free daily allowance and may pause when that limit is reached.')) return;
       runCreate('/api/generate-image', event.currentTarget, document.querySelector('#image-result'), JSON.stringify({prompt}));
     });
     document.querySelector('#animate-image').addEventListener('click', async event => {
@@ -905,9 +893,13 @@
         if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
         await refreshConversationList();
       } catch (error) {
-        const message = !navigator.onLine || error instanceof TypeError
-          ? 'The public AI needs an internet connection. For offline chat, run Ollama and server.py on this device, then open http://127.0.0.1:8000.'
-          : error.message;
+        const message = location.protocol === 'file:'
+          ? 'This page was opened as a file, so it cannot connect to the AI. Open the public site at https://offline-ai.sulaimanaliyu2009m.workers.dev/ instead.'
+          : !navigator.onLine
+            ? 'Your device reports that it is offline. Reconnect and try again.'
+            : error instanceof TypeError
+              ? 'Could not reach the AI service. Open the public site at https://offline-ai.sulaimanaliyu2009m.workers.dev/ and try again.'
+              : error.message;
         if (reply) reply.textContent = 'Error: ' + message;
         else voiceStatus.textContent = message;
       } finally {
