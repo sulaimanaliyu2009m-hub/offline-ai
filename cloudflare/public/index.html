@@ -89,6 +89,16 @@
     .create-card button:disabled { opacity:.55; cursor:wait; }
     .create-result { margin-top:14px; white-space:pre-wrap; overflow-wrap:anywhere; }
     .create-result img, .create-result video { display:block; max-width:100%; max-height:440px; margin-top:12px; border-radius:12px; }
+    .image-upload-box { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:14px; min-height:112px; padding:14px; border:1px dashed #c9c7d8; border-radius:15px; background:#fafafe; }
+    .image-upload-box.dragging { border-color:var(--accent); background:var(--accent-soft); }
+    .image-upload-meta { display:flex; align-items:center; gap:12px; min-width:0; }
+    #animation-preview { width:76px; height:76px; object-fit:cover; border-radius:11px; }
+    #animation-file-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-size:13px; }
+    .image-upload-actions { display:flex; align-items:center; gap:8px; }
+    .image-upload-actions button { white-space:nowrap; }
+    #remove-animation-image { background:#f0eff5; color:#414150; }
+    .download-link { display:inline-flex; margin-top:10px; padding:9px 13px; border-radius:10px; background:var(--accent-soft); color:var(--accent); font-weight:600; text-decoration:none; }
+    .download-link:hover { filter:brightness(.97); }
     #account-dialog { width:min(460px, calc(100vw - 28px)); border:1px solid #e6e8f0; border-radius:24px; padding:30px; box-shadow:0 28px 90px #161b352e; color:#202334; background:linear-gradient(145deg,#fff 0%,#fbfbff 100%); }
     #account-dialog::backdrop { background:#15192dcc; backdrop-filter:blur(5px); }
     #account-dialog h2 { margin:6px 0 7px; font-size:25px; letter-spacing:-.6px; }
@@ -180,6 +190,8 @@
       .composer-wrap { padding:10px 12px 14px; }
       #create-panel,#settings-panel { padding:25px 15px 38px; }
       .create-card { padding:18px; border-radius:16px; }
+      .image-upload-box { grid-template-columns:1fr; }
+      .image-upload-actions { flex-wrap:wrap; }
       .tool-tabs { width:100%; }
       .tool-tab { flex:1; padding:9px 8px; }
     }
@@ -221,8 +233,12 @@
       <div class="create-workspace" id="motion-tool" hidden>
       <div class="create-card">
         <h2>Make a free motion clip</h2>
-        <label for="animation-file">Choose an image (PNG, JPEG, or WebP; up to 8 MB)</label>
-        <input id="animation-file" type="file" accept="image/png,image/jpeg,image/webp">
+        <label>Image</label>
+        <div class="image-upload-box" id="animation-upload-box">
+          <div class="image-upload-meta"><img id="animation-preview" alt="Selected image preview" hidden><span id="animation-file-name">No image selected</span></div>
+          <div class="image-upload-actions"><button type="button" id="choose-animation-image">Choose image</button><button type="button" id="remove-animation-image" hidden>Remove</button></div>
+          <input id="animation-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        </div>
         <label for="motion-style">Motion</label>
         <select id="motion-style"><option value="zoom">Slow zoom in</option><option value="left">Pan left</option><option value="right">Pan right</option></select>
         <button id="animate-image">Create 5-second motion clip</button><div id="animation-result" class="create-result" aria-live="polite"></div>
@@ -646,7 +662,7 @@
         if (media.tagName === 'VIDEO') { media.controls = true; media.loop = true; }
         media.alt = 'Generated result';
         result.append(media);
-        const link = document.createElement('a'); link.href = data.url; link.download = ''; link.textContent = 'Download';
+        const link = document.createElement('a'); link.href = data.url; link.className='download-link'; link.download = endpoint.includes('generate-image') ? 'offline-ai-image.jpg' : 'offline-ai-result'; link.textContent = endpoint.includes('generate-image') ? 'Download image' : 'Download';
         result.append(link);
       } catch (error) { result.textContent = 'Error: ' + error.message; }
       finally { button.disabled = false; }
@@ -655,6 +671,49 @@
       const prompt = document.querySelector('#image-prompt').value.trim();
       if (!prompt) { document.querySelector('#image-result').textContent = 'Write an image description first.'; return; }
       runCreate('/api/generate-image', event.currentTarget, document.querySelector('#image-result'), JSON.stringify({prompt}));
+    });
+    const animationInput = document.querySelector('#animation-file');
+    const animationPreview = document.querySelector('#animation-preview');
+    const animationFileName = document.querySelector('#animation-file-name');
+    const removeAnimationImage = document.querySelector('#remove-animation-image');
+    const animationUploadBox = document.querySelector('#animation-upload-box');
+    let animationPreviewUrl = null;
+    document.querySelector('#choose-animation-image').addEventListener('click', () => animationInput.click());
+    function selectAnimationImage(file) {
+      if (!file) return;
+      if (!['image/png','image/jpeg','image/webp'].includes(file.type)) {
+        animationFileName.textContent = 'Choose a PNG, JPEG, or WebP image.';
+        animationInput.value = '';
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        animationFileName.textContent = 'Choose an image smaller than 8 MB.';
+        animationInput.value = '';
+        return;
+      }
+      if (animationPreviewUrl) URL.revokeObjectURL(animationPreviewUrl);
+      animationPreviewUrl = URL.createObjectURL(file);
+      animationPreview.src = animationPreviewUrl;
+      animationPreview.hidden = false;
+      animationFileName.textContent = file.name;
+      removeAnimationImage.hidden = false;
+    }
+    animationInput.addEventListener('change', () => selectAnimationImage(animationInput.files[0]));
+    document.querySelector('#remove-animation-image').addEventListener('click', () => {
+      if (animationPreviewUrl) URL.revokeObjectURL(animationPreviewUrl);
+      animationPreviewUrl = null;
+      animationInput.value = '';
+      animationPreview.removeAttribute('src');
+      animationPreview.hidden = true;
+      animationFileName.textContent = 'No image selected';
+      removeAnimationImage.hidden = true;
+    });
+    animationUploadBox.addEventListener('dragover', event => { event.preventDefault(); animationUploadBox.classList.add('dragging'); });
+    animationUploadBox.addEventListener('dragleave', () => animationUploadBox.classList.remove('dragging'));
+    animationUploadBox.addEventListener('drop', event => {
+      event.preventDefault(); animationUploadBox.classList.remove('dragging');
+      const file = event.dataTransfer.files[0];
+      if (file) { animationInput.files = event.dataTransfer.files; selectAnimationImage(file); }
     });
     document.querySelector('#animate-image').addEventListener('click', async event => {
       const file = document.querySelector('#animation-file').files[0];
@@ -702,7 +761,7 @@
         result.textContent = '';
         const video = document.createElement('video'); video.src = url; video.controls = true; video.loop = true;
         result.append(video);
-        const download = document.createElement('a'); download.href = url; download.download = 'offline-ai-motion.webm'; download.textContent = 'Download motion clip';
+        const download = document.createElement('a'); download.href = url; download.className='download-link'; download.download = 'offline-ai-motion.webm'; download.textContent = 'Download animation';
         result.append(download);
         URL.revokeObjectURL(image.src);
       } catch (error) { result.textContent = 'Could not create the clip in this browser: ' + error.message; }
