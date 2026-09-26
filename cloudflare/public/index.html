@@ -981,11 +981,11 @@
         await refreshConversationList();
       } catch (error) {
         const message = location.protocol === 'file:'
-          ? 'This page was opened as a file, so it cannot connect to the AI. Open the public site at https://offline-ai.sulaimanaliyu2009m.workers.dev/ instead.'
+          ? 'This page was opened as a file, so it cannot connect to the AI. Open the public site at https://amiir-ai.sulaimanaliyu2009m.workers.dev/ instead.'
           : !navigator.onLine
             ? 'Your device reports that it is offline. Reconnect and try again.'
             : error instanceof TypeError
-              ? 'Could not reach the AI service. Open the public site at https://offline-ai.sulaimanaliyu2009m.workers.dev/ and try again.'
+              ? 'Could not reach the AI service. Open the public site at https://amiir-ai.sulaimanaliyu2009m.workers.dev/ and try again.'
               : error.message;
         if (reply) reply.textContent = 'Error: ' + message;
         else voiceStatus.textContent = message;

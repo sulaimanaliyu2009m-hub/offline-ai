@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
-  "name": "offline-ai",
+  "name": "amiir-ai",
   "compatibility_date": "2026-09-24",
   "main": "./cloudflare/src/index.js",
   "ai": { "binding": "AI" },

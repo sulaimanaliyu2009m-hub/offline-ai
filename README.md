@@ -127,7 +127,7 @@ The Python application uses a local SQLite database and Ollama, so it cannot be 
 
 ### Cloudflare Worker deployment
 
-The Wrangler config deploys the interface and a Worker backend. Chat, guest conversation history, and D1 persistence use Cloudflare Workers AI and D1. The Worker name must remain `offline-ai`, matching the Cloudflare project. Use the repository root, deploy command `npx wrangler deploy`, and leave the output directory empty.
+The Wrangler config deploys the interface and a Worker backend. Chat, guest conversation history, and D1 persistence use Cloudflare Workers AI and D1. The Worker name is `amiir-ai`; the Cloudflare Worker project name must match it. Use the repository root, deploy command `npx wrangler deploy`, and leave the output directory empty.
 
 The D1 database `offline-ai-db` is configured in `wrangler.jsonc` with the `DB` binding and migrations directory. Apply new schema migrations from the project folder with `npx wrangler d1 migrations apply offline-ai-db --remote`, or paste the SQL migration into the D1 dashboard's Console if Wrangler authentication is unavailable. The AI binding is declared in `wrangler.jsonc` as `AI`.
 
