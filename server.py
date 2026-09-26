@@ -547,10 +547,19 @@ PAGE = '''<!doctype html>
     .nav-button.history-active { background:#e7f3f1; border-color:#d7e9e5; color:#286e67; font-weight:600; }
     #history-list { display:flex; flex-direction:column; gap:3px; max-height:min(42vh,390px); overflow:auto; padding:2px 2px 8px; }
     #history-list[hidden] { display:none; }
+    .history-row { display:flex; align-items:center; gap:2px; min-width:0; }
     .history-empty { padding:8px 10px; color:#888995; font-size:12px; }
-    .history-item { width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:8px 10px; border:1px solid transparent; border-radius:9px; background:transparent; color:#5d5f6b; text-align:left; font-size:12px; cursor:pointer; }
+    .history-item { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:8px 10px; border:1px solid transparent; border-radius:9px; background:transparent; color:#5d5f6b; text-align:left; font-size:12px; cursor:pointer; }
     .history-item:hover { background:#e7f3f1; color:#286e67; }
     .history-item.selected { background:#e7f3f1; color:#286e67; font-weight:600; }
+    .history-options { position:relative; flex:0 0 auto; opacity:0; }
+    .history-row:hover .history-options,.history-row:focus-within .history-options,.history-options[open] { opacity:1; }
+    .history-options summary { display:grid; place-items:center; width:30px; height:30px; list-style:none; border-radius:8px; color:#626471; cursor:pointer; }
+    .history-options summary::-webkit-details-marker { display:none; }
+    .history-options summary:hover { background:#e7e7ed; }
+    .history-menu { position:absolute; z-index:5; top:31px; right:0; min-width:120px; padding:4px; border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); }
+    .history-menu button { width:100%; padding:8px 10px; border:0; border-radius:7px; background:transparent; color:#a13e4d; text-align:left; cursor:pointer; }
+    .history-menu button:hover { background:#faeeee; }
     .main { min-width: 0; flex: 1; display: flex; flex-direction: column; background: var(--surface); }
     .topbar { height: 62px; flex: 0 0 62px; display: flex; align-items: center; gap:10px; padding: 0 26px; border-bottom: 1px solid #f0f0f3; font-size: 14px; font-weight: 650; background:#ffffffed; }
     .topbar-name { display:flex; align-items:center; gap:8px; }
@@ -685,6 +694,7 @@ PAGE = '''<!doctype html>
       .sidebar { display:flex; position:fixed; inset:0 auto 0 0; z-index:30; width:min(285px,85vw); transform:translateX(-105%); transition:transform .2s ease; box-shadow:0 20px 60px #17162b26; }
       .sidebar.open { transform:translateX(0); }
       #sidebar-backdrop.open { display:block; position:fixed; inset:0; z-index:29; background:#17162b70; }
+      .history-options { opacity:1; }
       .topbar { height:56px; flex-basis:56px; padding:0 11px; gap:5px; }
       #menu-toggle { display:block; }
       .topbar-name { font-size:14px; }
@@ -1305,12 +1315,28 @@ PAGE = '''<!doctype html>
         const empty = document.createElement('div'); empty.className = 'history-empty'; empty.textContent = 'Your conversations will appear here.'; list.append(empty);
       }
       for (const conversation of data.conversations.slice(0, 50)) {
-        const item = document.createElement('button'); item.type='button'; item.className='history-item'; item.textContent=conversation.title || 'New chat'; item.title=item.textContent;
+        const title = conversation.title || 'New chat';
+        const row = document.createElement('div'); row.className='history-row';
+        const item = document.createElement('button'); item.type='button'; item.className='history-item'; item.textContent=title; item.title=title;
         item.classList.toggle('selected', conversation.id === activeConversationId);
         item.addEventListener('click', () => openConversation(conversation.id).catch(error => { voiceStatus.textContent = error.message; }));
-        list.append(item);
+        const options = document.createElement('details'); options.className='history-options';
+        const menuToggle = document.createElement('summary'); menuToggle.textContent='⋯'; menuToggle.setAttribute('aria-label', 'Options for ' + title);
+        const menu = document.createElement('div'); menu.className='history-menu';
+        const deleteButton = document.createElement('button'); deleteButton.type='button'; deleteButton.textContent='Delete chat';
+        deleteButton.addEventListener('click', event => { event.stopPropagation(); options.open=false; deleteSavedConversation(conversation.id, title).catch(error => { voiceStatus.textContent=error.message; }); });
+        menu.append(deleteButton); options.append(menuToggle, menu); row.append(item, options); list.append(row);
       }
       return data.conversations;
+    }
+    async function deleteSavedConversation(id, title) {
+      if (document.querySelector('#send-button').disabled) throw new Error('Wait for the current reply to finish first.');
+      if (!confirm('Delete “' + title + '”? This cannot be undone.')) return;
+      const response = await fetch('/api/conversations/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:id})});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not delete this chat.');
+      if (activeConversationId === id) await createNewChat();
+      else await refreshConversationList();
     }
     async function openConversation(id) {
       const response = await fetch('/api/history?conversation_id=' + encodeURIComponent(id));
