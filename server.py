@@ -58,13 +58,13 @@ AI_PROVIDER = (load_local_setting("AI_PROVIDER") or "ollama").strip().lower()
 CLOUDFLARE_CHAT_MODEL = load_local_setting("CLOUDFLARE_CHAT_MODEL") or "@cf/meta/llama-3.1-8b-instruct"
 
 MANIFEST = json.dumps({
-    "name": "Offline AI", "short_name": "Offline AI", "start_url": "/",
+    "name": "Amiir AI", "short_name": "Amiir AI", "start_url": "/",
     "scope": "/", "display": "standalone", "background_color": "#ffffff",
     "theme_color": "#f8f8fb", "description": "Your personal AI workspace",
     "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}],
 }).encode("utf-8")
 APP_ICON = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#6158d0"/><stop offset="1" stop-color="#b97bbd"/></linearGradient></defs><rect width="128" height="128" rx="32" fill="url(#g)"/><path d="M64 25v78M25 64h78M36.5 36.5l55 55m0-55-55 55" stroke="white" stroke-width="9" stroke-linecap="round"/></svg>'
-SERVICE_WORKER = b"""const CACHE='offline-ai-shell-v1';const SHELL=['/','/manifest.webmanifest','/icon.svg'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==location.origin||u.pathname.startsWith('/api/')||u.pathname.startsWith('/generated/')||u.pathname==='/admin')return;e.respondWith(fetch(e.request).then(r=>{if(r.ok&&['/','/manifest.webmanifest','/icon.svg'].includes(u.pathname)){const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy))}return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('/')))))});"""
+SERVICE_WORKER = b"""const CACHE='amiir-ai-shell-v2';const SHELL=['/','/manifest.webmanifest','/icon.svg'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==location.origin||u.pathname.startsWith('/api/')||u.pathname.startsWith('/generated/')||u.pathname==='/admin')return;e.respondWith(fetch(e.request).then(r=>{if(r.ok&&['/','/manifest.webmanifest','/icon.svg'].includes(u.pathname)){const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy))}return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('/')))))});"""
 
 
 def normalize_signup_contact(value):
@@ -101,14 +101,14 @@ def hash_otp(contact, code):
 
 
 def deliver_signup_otp(contact, channel, code):
-    body = f"Your Offline AI verification code is {code}. It expires in 5 minutes. If you did not request this, ignore this message."
+    body = f"Your Amiir AI verification code is {code}. It expires in 5 minutes. If you did not request this, ignore this message."
     if channel == "email":
         host = load_local_setting("SMTP_HOST")
         sender = load_local_setting("SMTP_FROM")
         if not host or not sender:
             raise RuntimeError("Email verification is not configured yet. The site operator must configure SMTP_HOST and SMTP_FROM.")
         message = EmailMessage()
-        message["Subject"] = "Your Offline AI verification code"
+        message["Subject"] = "Your Amiir AI verification code"
         message["From"] = sender
         message["To"] = contact
         message.set_content(body)
@@ -220,7 +220,7 @@ def cloudflare_image_question(question, image_data_url):
 
 
 SYSTEM_PROMPT = (
-    "You are Offline AI, a friendly, clear, general-purpose chat assistant. Speak naturally and respectfully, "
+    "You are Amiir AI, a friendly, clear, general-purpose chat assistant. Speak naturally and respectfully, "
     "like a helpful person. Answer in the language the user used whenever possible, including local languages. "
     "Answer the actual question directly, with a short useful response; add detail only when it helps or the user asks. "
     "Keep track of the user's goal and recent conversation. Understand short replies such as 'mobile', 'game', or 'all' "
@@ -526,8 +526,8 @@ PAGE = '''<!doctype html>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Offline AI">
-  <title>Offline AI · Your AI workspace</title>
+  <meta name="apple-mobile-web-app-title" content="Amiir AI">
+  <title>Amiir AI · Your AI workspace</title>
   <style>
     :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202123; background: #f8f8fb; --ink:#202123; --muted:#777980; --line:#e7e7ed; --accent:#6258c9; --surface:#fff; --sidebar:#f4f4f7; --soft:#efeff4; --shadow:0 12px 36px #2523410c; }
     * { box-sizing: border-box; }
@@ -713,7 +713,7 @@ PAGE = '''<!doctype html>
 <body>
   <div id="sidebar-backdrop" aria-hidden="true"></div>
   <aside class="sidebar" id="app-sidebar">
-    <div class="brand"><span class="brand-mark">✳</span><span>Offline AI</span></div>
+    <div class="brand"><span class="brand-mark">✳</span><span>Amiir AI</span></div>
     <div class="side-label">Workspace</div>
     <button class="nav-button new-chat-button" id="new-chat-tab">＋ &nbsp; New chat</button>
     <button class="nav-button active" id="chat-tab">✳ &nbsp; Chat</button>
@@ -726,7 +726,7 @@ PAGE = '''<!doctype html>
     <div class="sidebar-note"><strong>Use it your way</strong>Continue as a guest or create an optional account to keep your chats together.</div>
   </aside>
   <main class="main">
-    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Offline AI</span><span class="model-tag">Local chat</span></header>
+    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span><span class="model-tag">Local chat</span></header>
     <section class="chat-area" id="chat-area">
       <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><p>Chat, voice, study file summaries, image questions, and image creation. Signup is optional.</p></div>
       <div id="messages" aria-live="polite"></div>
@@ -758,7 +758,7 @@ PAGE = '''<!doctype html>
       </div>
     </section>
     <section id="settings-panel" aria-labelledby="settings-heading">
-      <h1 id="settings-heading">Settings</h1><p>Personalize how Offline AI looks and behaves on this device.</p>
+      <h1 id="settings-heading">Settings</h1><p>Personalize how Amiir AI looks and behaves on this device.</p>
       <div class="settings-card"><h2>Appearance</h2><p>Choose the look and color you prefer.</p>
         <label for="theme-setting">Theme</label><select id="theme-setting"><option value="system">Use device setting</option><option value="light">Light</option><option value="dark">Dark</option></select>
         <label style="display:block;margin:16px 0 9px">Accent color</label><div class="accent-options" role="group" aria-label="Accent color"><button class="accent-choice" type="button" data-accent-choice="violet" aria-pressed="true"><span class="accent-dot" style="--choice:#6258c9"></span>Violet</button><button class="accent-choice" type="button" data-accent-choice="teal" aria-pressed="false"><span class="accent-dot" style="--choice:#287d72"></span>Teal</button><button class="accent-choice" type="button" data-accent-choice="blue" aria-pressed="false"><span class="accent-dot" style="--choice:#3474c5"></span>Blue</button><button class="accent-choice" type="button" data-accent-choice="rose" aria-pressed="false"><span class="accent-dot" style="--choice:#b95177"></span>Rose</button></div>
@@ -776,7 +776,7 @@ PAGE = '''<!doctype html>
       <div class="account-mark" aria-hidden="true">✳</div>
       <h2 id="account-heading">Welcome back</h2>
       <p id="account-details">Sign in to keep your chats connected across your devices.</p>
-      <p id="account-status" hidden>You are using Offline AI as a guest. All features are available without signing up.</p>
+      <p id="account-status" hidden>You are using Amiir AI as a guest. All features are available without signing up.</p>
       <div class="account-tabs" id="account-tabs" role="tablist" aria-label="Account access"><button id="mode-login" class="active" type="button" role="tab" aria-selected="true">Sign in</button><button id="mode-signup" type="button" role="tab" aria-selected="false">Create account</button></div>
       <form id="account-form">
         <div id="credentials-panel"><label id="account-contact-label" for="account-contact">Email address</label><input id="account-contact" autocomplete="username" maxlength="254" placeholder="you@example.com" required>
@@ -795,7 +795,7 @@ PAGE = '''<!doctype html>
     <div class="composer-wrap">
       <p id="voice-status" role="status" aria-live="polite"></p>
       <div id="attachment-preview" hidden><img id="attachment-thumbnail" alt="Selected image" hidden><span id="attachment-description"></span><button type="button" id="remove-attachment" aria-label="Remove attached file">×</button></div>
-      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx,.pptx,.mp3,.m4a,.wav,.webm,.ogg,.opus,.flac,.aac" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Offline AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
+      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx,.pptx,.mp3,.m4a,.wav,.webm,.ogg,.opus,.flac,.aac" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Amiir AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
       <label class="speak-toggle"><input type="checkbox" id="auto-speak"> Speak replies aloud</label>
     </div>
   </main>
@@ -856,7 +856,7 @@ PAGE = '''<!doctype html>
           conversations.push({title:conversation.title,createdAt:conversation.created_at,messages:history.messages});
         }
         const blob = new Blob([JSON.stringify({exportedAt:new Date().toISOString(),conversations},null,2)],{type:'application/json'});
-        const link = document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='offline-ai-conversations.json'; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+        const link = document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='amiir-ai-conversations.json'; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000);
         settingsStatus.textContent = 'Conversation export downloaded.';
       } catch (error) { settingsStatus.textContent = error.message; }
     });
@@ -1232,7 +1232,7 @@ PAGE = '''<!doctype html>
         result.textContent = '';
         const video = document.createElement('video'); video.src = url; video.controls = true; video.loop = true;
         result.append(video);
-        const download = document.createElement('a'); download.href = url; download.download = 'offline-ai-motion.webm'; download.textContent = 'Download motion clip';
+        const download = document.createElement('a'); download.href = url; download.download = 'amiir-ai-motion.webm'; download.textContent = 'Download motion clip';
         result.append(download);
         URL.revokeObjectURL(image.src);
       } catch (error) { result.textContent = 'Could not create the clip in this browser: ' + error.message; }
@@ -1538,10 +1538,10 @@ PAGE = '''<!doctype html>
 </html>'''.encode("utf-8")
 
 
-ADMIN_PAGE = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>Offline AI · Owner console</title>
+ADMIN_PAGE = '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>Amiir AI · Owner console</title>
 <style>
 :root{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#202123;background:#f7f7fa;--muted:#777980;--line:#e7e7ed;--accent:#6258c9;--surface:#fff}*{box-sizing:border-box}body{margin:0;min-height:100vh}.wrap{max-width:1120px;margin:auto;padding:28px 22px 60px}header{display:flex;align-items:center;gap:12px;min-height:54px}h1{font-size:24px;letter-spacing:-.5px;margin:0}.brand{width:36px;height:36px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(145deg,#6158d0,#b97bbd);color:white}#logout{margin-left:auto}section{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #25234109}h2{font-size:16px;margin:0 0 6px}p{color:var(--muted);font-size:13px;line-height:1.55}button,input{font:inherit;border:1px solid #dedee8;border-radius:10px;padding:10px 12px}button{cursor:pointer;background:#29263f;color:white;border-color:#29263f}button:hover{background:#4b467a}button.secondary{background:white;color:#343541;border-color:var(--line)}button.danger{background:#fff;color:#a53142;border-color:#eccdd1;padding:7px 10px;font-size:12px}button:disabled{opacity:.6;cursor:wait}label{display:block;margin:14px 0 7px;font-size:13px;font-weight:600}#password{width:min(100%,420px)}#error{color:#a53142}#notice{min-height:20px;margin:8px 0}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:16px}.card{padding:15px;background:#f6f6f9;border:1px solid #eeeeF2;border-radius:12px;color:#686a77;font-size:12px}.card strong{display:block;font-size:23px;color:#282735;margin-bottom:4px}.service-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px;margin-top:14px}.service{padding:11px 13px;border:1px solid var(--line);border-radius:11px;font-size:13px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c7c8ce;margin-right:8px}.dot.ok{background:#31a66a}.setting-row{display:flex;align-items:center;gap:10px;margin:14px 0}.setting-row label{margin:0;font-weight:500}.inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.limit{width:130px}#accounts-search{width:min(100%,360px);margin:10px 0}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:640px}td,th{text-align:left;border-bottom:1px solid #eee;padding:11px 9px;font-size:13px}th{color:#777980;font-weight:600}.actions{display:flex;gap:8px;flex-wrap:wrap}.tools{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}.hint{padding:11px 13px;background:#f4f2fb;border-radius:10px}.login-card{max-width:560px}#panel[hidden],#login[hidden]{display:none}@media(max-width:600px){.wrap{padding:18px 12px 42px}section{padding:16px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
-</style></head><body><main class="wrap"><header><div class="brand">✳</div><div><h1>Owner console</h1><small>Offline AI · private controls</small></div><button id="logout" class="secondary" hidden>Sign out</button></header>
+</style></head><body><main class="wrap"><header><div class="brand">✳</div><div><h1>Owner console</h1><small>Amiir AI · private controls</small></div><button id="logout" class="secondary" hidden>Sign out</button></header>
 <section id="login" class="login-card"><h2>Admin sign in</h2><p>Enter the private ADMIN_PASSWORD configured on this server.</p><form id="login-form"><label for="password">Admin password</label><input id="password" type="password" autocomplete="current-password" required><p id="error" role="status"></p><button>Sign in</button></form></section>
 <div id="panel" hidden><p id="notice" role="status" aria-live="polite"></p><section><h2>Overview</h2><p>Counts and service readiness for this app instance.</p><div id="stats" class="cards"></div><div id="services" class="service-grid"></div></section>
 <section><h2>AI behavior and access</h2><p>Settings apply immediately. Choose an installed Ollama model; this does not download models.</p><form id="settings"><label for="model-name">Ollama model</label><input id="model-name" list="model-options" autocomplete="off" required><datalist id="model-options"></datalist><div class="inline"><div><label for="context-window">Context window (tokens)</label><input id="context-window" class="limit" type="number" min="2048" max="32768" step="1024"></div><div><label for="temperature">Temperature</label><input id="temperature" class="limit" type="number" min="0" max="2" step="0.1"></div></div><small>Larger context and higher temperature use more memory and can slow local responses.</small><label for="system-prompt">Assistant instructions</label><textarea id="system-prompt" rows="5" maxlength="5000" style="width:100%;resize:vertical;border:1px solid #dedee8;border-radius:10px;padding:11px;font:inherit"></textarea><small>Up to 5,000 characters. Keep instructions clear and do not include private secrets.</small><div class="setting-row"><input id="signup-enabled" type="checkbox"><label for="signup-enabled">Allow new account signups</label></div><div class="setting-row"><input id="image-enabled" type="checkbox"><label for="image-enabled">Enable online image generation and image analysis</label></div><div class="inline"><div><label for="user-image-limit">Daily image limit per user or guest</label><input id="user-image-limit" class="limit" type="number" min="0" max="10000"></div><div><label for="image-limit">App-wide daily image cap</label><input id="image-limit" class="limit" type="number" min="0" max="100000"></div></div><small>Set either cap to 0 for no app-imposed limit. Cloudflare still enforces its own quotas; provider usage or hosting may incur charges.</small><p><button>Save AI and access settings</button></p></form></section>

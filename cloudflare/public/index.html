@@ -8,8 +8,8 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Offline AI">
-  <title>Offline AI · Your AI workspace</title>
+  <meta name="apple-mobile-web-app-title" content="Amiir AI">
+  <title>Amiir AI · Your AI workspace</title>
   <style>
     :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202123; background: #f8f8fb; --ink:#202123; --muted:#777980; --line:#e7e7ed; --accent:#6258c9; --surface:#fff; --sidebar:#f4f4f7; --soft:#efeff4; --shadow:0 12px 36px #2523410c; }
     * { box-sizing: border-box; }
@@ -104,7 +104,8 @@
     #account-dialog h2 { margin:6px 0 7px; font-size:25px; letter-spacing:-.6px; }
     #account-dialog p { color:#72788a; font-size:13px; line-height:1.55; }
     #account-dialog label { display:block; color:#34394b; font-size:13px; font-weight:600; margin:16px 0 7px; }
-    #account-dialog input:not([type=checkbox]) { width:100%; padding:13px 14px; border:1px solid #dfe2eb; border-radius:12px; font:inherit; outline:none; background:#fff; transition:border-color .15s,box-shadow .15s; }
+    #account-dialog input:not([type=checkbox]) { width:100%; min-height:48px; padding:13px 14px; border:1px solid #dfe2eb; border-radius:12px; font:inherit; font-size:16px; color:#202334; caret-color:#6258c9; -webkit-text-fill-color:#202334; outline:none; background:#fff; color-scheme:light; transition:border-color .15s,box-shadow .15s; }
+    #account-dialog input:not([type=checkbox])::placeholder { color:#85899a; opacity:1; -webkit-text-fill-color:#85899a; }
     #account-dialog input:focus { border-color:#7885e8; box-shadow:0 0 0 4px #7885e81c; }
     .password-wrap { position:relative; }
     .password-wrap input { padding-right:70px !important; }
@@ -172,7 +173,8 @@
     :root[data-theme="dark"] .tool-tabs,:root[data-theme="dark"] .tool-tab.active,:root[data-theme="dark"] .prompt-chip { background:#30303a !important; color:#e8e8ee !important; border-color:#464650 !important; }
     :root[data-theme="dark"] .settings-actions button,:root[data-theme="dark"] .accent-choice { background:#292930; color:#eee; border-color:#464650; }
     :root[data-theme="dark"] #account-dialog { background:#222228; color:#eee; border-color:#41414b; }
-    :root[data-theme="dark"] #account-dialog input:not([type=checkbox]) { background:#19191e; color:#eee; border-color:#464650; }
+    :root[data-theme="dark"] #account-dialog input:not([type=checkbox]) { background:#19191e; color:#eee; caret-color:#aaa5ff; -webkit-text-fill-color:#eee; border-color:#464650; color-scheme:dark; }
+    :root[data-theme="dark"] #account-dialog input:not([type=checkbox])::placeholder { color:#aaaab5; -webkit-text-fill-color:#aaaab5; }
     @media (prefers-color-scheme: dark) { :root[data-theme="system"] { color-scheme:dark; color:#e8e8ee; background:#19191e; --ink:#e8e8ee; --muted:#a5a5b1; --line:#373741; --surface:#202027; --sidebar:#19191e; --soft:#2a2a33; --shadow:0 12px 36px #0005; } :root[data-theme="system"] body,:root[data-theme="system"] .main,:root[data-theme="system"] .chat-area,:root[data-theme="system"] .sidebar,:root[data-theme="system"] .topbar { background:#202027; color:#e8e8ee; } :root[data-theme="system"] .sidebar,:root[data-theme="system"] .topbar { background:#19191e; border-color:#373741; } :root[data-theme="system"] .create-card,:root[data-theme="system"] .settings-card,:root[data-theme="system"] #chat { background:#292930; border-color:#3c3c46; color:#e8e8ee; } :root[data-theme="system"] .create-card textarea,:root[data-theme="system"] .create-card select,:root[data-theme="system"] .settings-card select,:root[data-theme="system"] #prompt { background:#222228; color:#f1f1f5; border-color:#464650; } }
     #sidebar-backdrop { display:none; }
     @media (max-width: 760px) {
@@ -201,7 +203,7 @@
 <body>
   <div id="sidebar-backdrop" aria-hidden="true"></div>
   <aside class="sidebar" id="app-sidebar">
-    <div class="brand"><span class="brand-mark">✳</span><span>Offline AI</span></div>
+    <div class="brand"><span class="brand-mark">✳</span><span>Amiir AI</span></div>
     <div class="side-label">Workspace</div>
     <button class="nav-button new-chat-button" id="new-chat-tab">＋ &nbsp; New chat</button>
     <button class="nav-button active" id="chat-tab">✳ &nbsp; Chat</button>
@@ -213,7 +215,7 @@
     <button class="nav-button account-button" id="account-button">♙ &nbsp; Account</button>
   </aside>
   <main class="main">
-    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Offline AI</span></header>
+    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span></header>
     <section class="chat-area" id="chat-area">
       <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1></div>
       <div id="messages" aria-live="polite"></div>
@@ -264,7 +266,7 @@
       <div class="account-mark" aria-hidden="true">✳</div>
       <h2 id="account-heading">Welcome back</h2>
       <p id="account-details" hidden></p>
-      <p id="account-status" hidden>You are using Offline AI as a guest. All features are available without signing up.</p>
+      <p id="account-status" hidden>You are using Amiir AI as a guest. All features are available without signing up.</p>
       <div class="account-tabs" id="account-tabs" role="tablist" aria-label="Account access"><button id="mode-login" class="active" type="button" role="tab" aria-selected="true">Sign in</button><button id="mode-signup" type="button" role="tab" aria-selected="false">Create account</button></div>
       <form id="account-form">
         <div id="credentials-panel"><label id="account-contact-label" for="account-contact">Email address</label><input id="account-contact" autocomplete="username" maxlength="254" placeholder="you@example.com" required>
@@ -282,7 +284,7 @@
     <div class="composer-wrap">
       <p id="voice-status" role="status" aria-live="polite"></p>
       <div id="attachment-preview" hidden><img id="attachment-thumbnail" alt="Selected image" hidden><span id="attachment-description"></span><button type="button" id="remove-attachment" aria-label="Remove attached file">×</button></div>
-      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx,.pptx,.mp3,.m4a,.wav,.webm,.ogg,.opus,.flac,.aac" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Offline AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
+      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx,.pptx,.mp3,.m4a,.wav,.webm,.ogg,.opus,.flac,.aac" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Amiir AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
       <label class="speak-toggle"><input type="checkbox" id="auto-speak"> Speak replies aloud</label>
     </div>
   </main>
@@ -343,7 +345,7 @@
           conversations.push({title:conversation.title,createdAt:conversation.created_at,messages:history.messages});
         }
         const blob = new Blob([JSON.stringify({exportedAt:new Date().toISOString(),conversations},null,2)],{type:'application/json'});
-        const link = document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='offline-ai-conversations.json'; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+        const link = document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='amiir-ai-conversations.json'; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000);
         settingsStatus.textContent = 'Conversation export downloaded.';
       } catch (error) { settingsStatus.textContent = error.message; }
     });
@@ -662,7 +664,7 @@
         if (media.tagName === 'VIDEO') { media.controls = true; media.loop = true; }
         media.alt = 'Generated result';
         result.append(media);
-        const link = document.createElement('a'); link.href = data.url; link.className='download-link'; link.download = endpoint.includes('generate-image') ? 'offline-ai-image.jpg' : 'offline-ai-result'; link.textContent = endpoint.includes('generate-image') ? 'Download image' : 'Download';
+        const link = document.createElement('a'); link.href = data.url; link.className='download-link'; link.download = endpoint.includes('generate-image') ? 'amiir-ai-image.jpg' : 'amiir-ai-result'; link.textContent = endpoint.includes('generate-image') ? 'Download image' : 'Download';
         result.append(link);
       } catch (error) { result.textContent = 'Error: ' + error.message; }
       finally { button.disabled = false; }
@@ -761,7 +763,7 @@
         result.textContent = '';
         const video = document.createElement('video'); video.src = url; video.controls = true; video.loop = true;
         result.append(video);
-        const download = document.createElement('a'); download.href = url; download.className='download-link'; download.download = 'offline-ai-motion.webm'; download.textContent = 'Download animation';
+        const download = document.createElement('a'); download.href = url; download.className='download-link'; download.download = 'amiir-ai-motion.webm'; download.textContent = 'Download animation';
         result.append(download);
         URL.revokeObjectURL(image.src);
       } catch (error) { result.textContent = 'Could not create the clip in this browser: ' + error.message; }

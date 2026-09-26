@@ -1,4 +1,4 @@
-# Offline AI
+# Amiir AI
 
 A personal AI workspace with an Ollama chat, saved conversations, appearance and chat preferences, file summaries, voice input, optional accounts, image generation, and browser based motion clips. It is packaged as an installable web app for the computer or phone that can reach the server.
 
@@ -25,10 +25,10 @@ The Ollama endpoint can be changed with `OLLAMA_BASE_URL` in `.env`, for example
 
    ```sh
    ollama pull qwen3:4b
-   ollama create ameer-offline-ai -f Modelfile
+   ollama create amiir-ai -f Modelfile
    ```
 
-   This creates a named, customized model based on Qwen3 4B; it does not train the underlying model from scratch. To use it in the app, add `OLLAMA_MODEL=ameer-offline-ai` to `.env` and restart the app. On computers with limited memory, Qwen3 4B may respond slowly.
+   This creates a named, customized model based on Qwen3 4B; it does not train the underlying model from scratch. To use it in the app, add `OLLAMA_MODEL=amiir-ai` to `.env` and restart the app. On computers with limited memory, Qwen3 4B may respond slowly.
 
 3. Create the app's virtual environment. The chat server itself uses only Python's standard library. Install the optional local voice transcription library only if you want microphone transcription:
 
@@ -73,7 +73,7 @@ SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_USERNAME=your-smtp-user
 SMTP_PASSWORD=your-smtp-password
-SMTP_FROM=Offline AI <noreply@example.com>
+SMTP_FROM=Amiir AI <noreply@example.com>
 
 TWILIO_ACCOUNT_SID=your-account-sid
 TWILIO_AUTH_TOKEN=your-auth-token
@@ -149,7 +149,7 @@ This is the first backend release. Text chat, guest history, image generation, a
 3. Commit and connect the repository GitHub created for you (replace the sample URL with your own repository URL):
 
    ```sh
-   git commit -m "Prepare Offline AI for GitHub"
+   git commit -m "Prepare Amiir AI for GitHub"
    git branch -M main
    git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPOSITORY.git
    git remote -v
