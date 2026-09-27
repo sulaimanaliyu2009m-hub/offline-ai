@@ -129,6 +129,7 @@
     .speak-button { border:0; border-radius:8px; padding:5px 8px; background:#f3f3f3; color:#555; cursor:pointer; font-size:12px; }
     .speak-button:disabled { opacity:.5; cursor:default; }
     .composer-wrap { flex: 0 0 auto; padding: 14px 24px calc(18px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(#ffffffdb, #fff 30%); }
+    .composer-options { display:flex; justify-content:center; gap:18px; }
     #attachment-preview { width:min(100%, 770px); margin:0 auto 8px; padding:8px 10px; border:1px solid var(--line); border-radius:12px; display:flex; align-items:center; gap:10px; color:var(--muted); font-size:12px; }
     .attachment-copy { min-width:0; flex:1; display:grid; gap:3px; }
     #attachment-description { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); }
@@ -426,7 +427,7 @@
       <p id="voice-status" role="status" aria-live="polite"></p>
       <div id="attachment-preview" hidden><img id="attachment-thumbnail" alt="Selected image" hidden><div class="attachment-copy"><span id="attachment-description"></span><span id="attachment-meta" role="status" aria-live="polite"></span><progress id="attachment-progress" max="100" value="0" hidden aria-label="File upload progress"></progress></div><button type="button" id="remove-attachment" aria-label="Remove attached file">×</button></div>
       <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Amiir AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="button" id="stop-button" aria-label="Stop waiting for response" title="Stop waiting for response">■</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
-      <label class="speak-toggle"><input type="checkbox" id="auto-speak"> Speak replies aloud</label>
+      <div class="composer-options"><label class="speak-toggle"><input type="checkbox" id="auto-speak"> Speak replies aloud</label><label class="speak-toggle"><input type="checkbox" id="temporary-chat"> Temporary chat</label></div>
     </div>
   </main>
   <script>
@@ -474,6 +475,31 @@
     const projectStatus = document.querySelector('#project-status');
     let projectCache = [];
     let selectedProjectId = '';
+    let temporaryChat = false;
+    let temporaryMessages = [];
+    const temporaryChatToggle = document.querySelector('#temporary-chat');
+    temporaryChatToggle.addEventListener('change', async () => {
+      if (document.body.classList.contains('generating')) { temporaryChatToggle.checked = temporaryChat; return; }
+      temporaryChat = temporaryChatToggle.checked;
+      temporaryMessages = [];
+      activeConversationId = null;
+      if (temporaryChat) selectedProjectId = '';
+      conversationProject.disabled = temporaryChat;
+      renderProjectSelectors();
+      messages.replaceChildren();
+      welcome.hidden = false;
+      document.querySelector('#conversation-title').textContent = temporaryChat ? 'Temporary chat' : '';
+      imagePicker.disabled = temporaryChat;
+      document.querySelector('#attach-button').disabled = temporaryChat;
+      if (temporaryChat) {
+        clearChatImage();
+        voiceStatus.textContent = 'Temporary chat is not saved to history. Attachments are disabled in this mode.';
+      } else {
+        voiceStatus.textContent = 'Starting a regular chat…';
+        try { await createNewChat(); voiceStatus.textContent = ''; }
+        catch (error) { voiceStatus.textContent = error.message; }
+      }
+    });
     function applyPreferences() {
       rootElement.dataset.theme = localStorage.getItem('offlineAiTheme') || 'system';
       rootElement.dataset.accent = localStorage.getItem('offlineAiAccent') || 'violet';
@@ -717,7 +743,16 @@
     if (localStorage.getItem('amiirSidebarCollapsed') === 'true' && matchMedia('(min-width: 761px)').matches) appSidebar.classList.add('collapsed');
     document.querySelector('#chat-tab').addEventListener('click', () => setView('chat'));
     document.querySelector('#create-tab').addEventListener('click', () => setView('create'));
-    document.querySelector('#new-chat-tab').addEventListener('click', async () => { try { await createNewChat(); } catch (error) { voiceStatus.textContent = error.message; } });
+    document.querySelector('#new-chat-tab').addEventListener('click', async () => {
+      try {
+        if (temporaryChat) {
+          temporaryMessages = []; activeConversationId = null; messages.replaceChildren(); welcome.hidden = false;
+          document.querySelector('#conversation-title').textContent = 'Temporary chat';
+          input.value = ''; input.style.height = 'auto'; clearChatImage(); setView('chat'); closeSidebar();
+          voiceStatus.textContent = 'New temporary chat. Messages are not saved to history.';
+        } else await createNewChat();
+      } catch (error) { voiceStatus.textContent = error.message; }
+    });
     document.querySelector('#settings-tab').addEventListener('click', () => setView('settings'));
     const sidebarBackdrop = document.querySelector('#sidebar-backdrop');
     const menuToggle = document.querySelector('#menu-toggle');
@@ -1335,9 +1370,12 @@
         listen.addEventListener('click', () => speakText(body.dataset.raw || body.textContent, listen));
         const copy = document.createElement('button'); copy.type='button'; copy.textContent='Copy'; copy.setAttribute('aria-label','Copy assistant response');
         copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(body.dataset.raw || ''); copy.textContent='Copied'; setTimeout(()=>copy.textContent='Copy',1200); } catch { voiceStatus.textContent='Could not copy the response in this browser.'; } });
-        const regenerate=document.createElement('button'); regenerate.type='button'; regenerate.textContent='Regenerate'; regenerate.setAttribute('aria-label','Regenerate assistant response');
-        regenerate.addEventListener('click',()=>regenerateAssistant(row,body,regenerate));
-        tools.append(copy, listen, regenerate);
+        tools.append(copy, listen);
+        if (!temporaryChat) {
+          const regenerate=document.createElement('button'); regenerate.type='button'; regenerate.textContent='Regenerate'; regenerate.setAttribute('aria-label','Regenerate assistant response');
+          regenerate.addEventListener('click',()=>regenerateAssistant(row,body,regenerate));
+          tools.append(regenerate);
+        }
         row.append(tools);
         body.speakButton = listen;
       } else {
@@ -1345,9 +1383,12 @@
         tools.className='message-tools';
         const copy=document.createElement('button'); copy.type='button'; copy.textContent='Copy'; copy.setAttribute('aria-label','Copy your message');
         copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(body.dataset.raw||'');copy.textContent='Copied';setTimeout(()=>copy.textContent='Copy',1200);}catch{voiceStatus.textContent='Could not copy that message in this browser.';}});
-        const edit=document.createElement('button'); edit.type='button'; edit.className='message-edit-button'; edit.textContent='Edit'; edit.setAttribute('aria-label','Edit your latest message');
-        edit.addEventListener('click',()=>openMessageEditor(row,body,tools));
-        tools.append(copy,edit);
+        tools.append(copy);
+        if (!temporaryChat) {
+          const edit=document.createElement('button'); edit.type='button'; edit.className='message-edit-button'; edit.textContent='Edit'; edit.setAttribute('aria-label','Edit your latest message');
+          edit.addEventListener('click',()=>openMessageEditor(row,body,tools));
+          tools.append(edit);
+        }
         row.append(tools);
       }
       messages.append(row);
@@ -1706,6 +1747,7 @@
       const text = input.value.trim();
       const attachmentFile = selectedChatFile;
       const isImage = attachmentFile && ['image/png', 'image/jpeg', 'image/webp'].includes(attachmentFile.type);
+      if (temporaryChat && attachmentFile) { voiceStatus.textContent = 'Attachments are unavailable in temporary chat. Turn off Temporary chat to upload a file or image.'; return; }
       if (!text && !attachmentFile) return;
       const sendButton = document.querySelector('#send-button');
       if (document.body.classList.contains('generating')) return;
@@ -1754,7 +1796,7 @@
           response = await fetch('/api/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: text, conversation_id: activeConversationId }),
+              body: JSON.stringify({ message: text, conversation_id: activeConversationId, temporary:temporaryChat, history:temporaryChat?temporaryMessages:undefined }),
               signal: requestController.signal
             });
         }
@@ -1776,10 +1818,14 @@
           setMessageText(reply,answer);
           chatArea.scrollTop=chatArea.scrollHeight;
         });
+        if (temporaryChat) {
+          temporaryMessages.push({ role:'user', content:shownText }, { role:'assistant', content:answer });
+          temporaryMessages = temporaryMessages.slice(-14);
+        }
         if (attachmentFile) clearChatImage();
         if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
         voiceStatus.textContent = '';
-        await refreshConversationListSafely('The reply was received');
+        if (!temporaryChat) await refreshConversationListSafely('The reply was received');
       } catch (error) {
         if (attachmentFile) attachmentMeta.textContent = error.name === 'AbortError' ? 'Upload stopped. You can retry or remove it.' : (error.message || 'Upload or processing failed. You can retry or remove it.');
         if (text) { input.value=text; input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,160)+'px'; }

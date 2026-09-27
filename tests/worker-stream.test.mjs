@@ -306,6 +306,42 @@ test("projects are owner-scoped and project instructions are stored with project
   assert.ok(writes.some(write => write.sql.includes("UPDATE conversations SET project_id") && write.args[0] === created.project.id && write.args[2] === "chat-1" && write.args[3] === ownerId));
 });
 
+test("temporary chat streams with browser context and writes no conversation or message data", async () => {
+  const writes = [];
+  let modelMessages;
+  const db = {
+    prepare(sql) {
+      return {
+        sql, args: [], bind(...args) { this.args = args; return this; },
+        async first() { return null; },
+        async all() { return { results: [] }; },
+        async run() { writes.push({ sql: this.sql, args: this.args }); return { success: true }; },
+      };
+    },
+    async batch(statements) { writes.push(...statements); return []; },
+  };
+  const response = await worker.fetch(new Request("https://example.test/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      temporary: true,
+      history: [{ role: "user", content: "I am studying plants." }, { role: "assistant", content: "Got it." }],
+      message: "Explain photosynthesis.",
+    }),
+  }), { DB: db, AI: { async run(_model, options) {
+    modelMessages = options.messages;
+    return new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('data: {"response":"Plants use light."}\n\ndata: [DONE]\n\n')); controller.close(); } });
+  } } });
+  assert.equal(response.status, 200);
+  await response.text();
+  assert.deepEqual(modelMessages.slice(1, 3), [
+    { role: "user", content: "I am studying plants." },
+    { role: "assistant", content: "Got it." },
+  ]);
+  assert.equal(modelMessages.at(-1).content, "Explain photosynthesis.");
+  assert.equal(writes.length, 0);
+});
+
 test("a Workers AI provider failure returns a traceable error instead of hiding the cause", async () => {
   const db = {
     prepare() {

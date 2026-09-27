@@ -611,10 +611,27 @@ async function routeApi(request, env, owner, trace) {
       }
     }
 
-    let conversationId = typeof body.conversation_id === "string" ? body.conversation_id : "";
-    let conversation = conversationId ? await ensureConversation(env.DB, owner.id, conversationId) : null;
+    const temporaryChat = body.temporary === true;
+    if (temporaryChat && (body.conversation_id || imageBytes || regenerate || replaceLast)) {
+      return ownerJson({ error: "Temporary chat accepts text only and cannot modify a saved conversation." }, owner, 400);
+    }
+    let temporaryHistory = [];
+    if (temporaryChat) {
+      if (body.history !== undefined && !Array.isArray(body.history)) return ownerJson({ error: "Temporary chat context is invalid." }, owner, 400);
+      temporaryHistory = (body.history || []).slice(-14);
+      let historyChars = 0;
+      for (const item of temporaryHistory) {
+        if (!item || !["user", "assistant"].includes(item.role) || typeof item.content !== "string" || item.content.length > MAX_PROMPT_CHARS) {
+          return ownerJson({ error: "Temporary chat context is invalid." }, owner, 400);
+        }
+        historyChars += item.content.length;
+        if (historyChars > 24000) return ownerJson({ error: "Temporary chat context is too large. Start a new temporary chat." }, owner, 413);
+      }
+    }
+    let conversationId = temporaryChat ? "" : typeof body.conversation_id === "string" ? body.conversation_id : "";
+    let conversation = temporaryChat ? null : conversationId ? await ensureConversation(env.DB, owner.id, conversationId) : null;
     if ((regenerate || replaceLast) && (!conversation || imageData)) return ownerJson({ error: "This response cannot be changed. Reattach the original file or image and ask again." }, owner, 400);
-    if (!conversation) {
+    if (!temporaryChat && !conversation) {
       conversationId = crypto.randomUUID();
       const now = Date.now();
       if (body.project_id != null && typeof body.project_id !== "string") return ownerJson({ error: "Choose a valid project." }, owner, 400);
@@ -627,12 +644,12 @@ async function routeApi(request, env, owner, trace) {
       ).bind(conversationId, owner.id, now, now, projectId).run();
       conversation = { id: conversationId, project_id: projectId };
     }
-    const projectInstructions = await projectInstructionsFor(env, owner, conversation.project_id);
+    const projectInstructions = temporaryChat ? "" : await projectInstructionsFor(env, owner, conversation.project_id);
 
-    const prior = await env.DB.prepare(
+    const prior = temporaryChat ? null : await env.DB.prepare(
       "SELECT id, role, content FROM messages WHERE conversation_id = ? AND owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 14",
     ).bind(conversationId, owner.id).all();
-    const priorMessages = (prior.results || []).reverse();
+    const priorMessages = temporaryChat ? temporaryHistory : (prior.results || []).reverse();
     let replacedAssistantId = null;
     let replacedUserId = null;
     let history = priorMessages.map(({ role, content }) => ({ role, content }));
@@ -646,7 +663,7 @@ async function routeApi(request, env, owner, trace) {
       replacedUserId = replaceLast ? lastUser.id : null;
       if (regenerate) message = lastUser.content;
       history = priorMessages.slice(0, -2).map(({ role, content }) => ({ role, content }));
-    } else {
+    } else if (!temporaryChat) {
       const now = Date.now();
       await env.DB.prepare(
         "INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'user', ?, ?)",
@@ -689,7 +706,7 @@ async function routeApi(request, env, owner, trace) {
     try {
       modelStream = await env.AI.run(MODEL, {
         messages: [
-          { role: "system", content: `${personalizedSystemPrompt(preferences)}${projectInstructions ? `\n\nProject instructions:\n${projectInstructions}` : ""}` },
+          { role: "system", content: `${personalizedSystemPrompt(preferences, { includeMemory: !temporaryChat })}${projectInstructions ? `\n\nProject instructions:\n${projectInstructions}` : ""}` },
           ...history,
           { role: "user", content: message },
         ],
@@ -718,6 +735,7 @@ async function routeApi(request, env, owner, trace) {
         pendingLine += decoder.decode();
         if (pendingLine) answer += responseTextFromSseLine(pendingLine.replace(/\r$/, ""));
         if (!answer) return;
+        if (temporaryChat) return;
         const savedAt = Date.now();
         const writes = [];
         if (replacedUserId) writes.push(env.DB.prepare("UPDATE messages SET content = ? WHERE id = ? AND owner_id = ? AND role = 'user'").bind(message, replacedUserId, owner.id));
