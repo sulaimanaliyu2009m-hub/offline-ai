@@ -457,6 +457,9 @@ def initialize_database():
             database.execute("ALTER TABLE messages ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'legacy'")
         database.execute("CREATE INDEX IF NOT EXISTS messages_owner_id ON messages(owner_id, id)")
         database.execute("CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, title TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+        conversation_columns = {row[1] for row in database.execute("PRAGMA table_info(conversations)")}
+        if "archived_at" not in conversation_columns:
+            database.execute("ALTER TABLE conversations ADD COLUMN archived_at INTEGER")
         database.execute("CREATE INDEX IF NOT EXISTS conversations_owner_updated ON conversations(owner_id, updated_at DESC)")
         columns = {row[1] for row in database.execute("PRAGMA table_info(messages)")}
         if "conversation_id" not in columns:
@@ -2180,9 +2183,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, self.account_status(owner))
             return
         if path == "/api/conversations":
+            query = parse_qs(urlsplit(self.path).query)
+            archived = query.get("archived", ["false"])[0].lower() == "true"
             with sqlite3.connect(DB_PATH) as database:
-                rows = database.execute("SELECT id,title,created_at,updated_at FROM conversations WHERE owner_id=? ORDER BY updated_at DESC,created_at DESC LIMIT 100", (owner,)).fetchall()
-            self.send_json(200, {"conversations": [{"id": row[0], "title": row[1], "created_at": row[2], "updated_at": row[3]} for row in rows]})
+                rows = database.execute(
+                    "SELECT c.id,c.title,c.created_at,c.updated_at,c.archived_at,"
+                    "(SELECT substr(m.content,1,180) FROM messages m WHERE m.conversation_id=c.id AND m.owner_id=c.owner_id ORDER BY m.id DESC LIMIT 1) "
+                    "FROM conversations c WHERE c.owner_id=? AND (c.archived_at IS NOT NULL)=? "
+                    "ORDER BY c.updated_at DESC,c.created_at DESC LIMIT 100",
+                    (owner, int(archived)),
+                ).fetchall()
+            self.send_json(200, {"conversations": [{"id": row[0], "title": row[1], "created_at": row[2], "updated_at": row[3], "archived_at": row[4], "preview": row[5] or ""} for row in rows]})
             return
         if path.startswith("/generated/"):
             name = path.rsplit("/", 1)[-1]
@@ -2263,6 +2274,36 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError):
                 self.send_json(400, {"error": "Could not delete that conversation."})
             return
+        if path in {"/api/conversations/rename", "/api/conversations/archive"}:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(length)) if 0 < length <= 2000 else {}
+                conversation_id = payload.get("conversation_id") if isinstance(payload, dict) else None
+                if not isinstance(conversation_id, str) or not re.fullmatch(r"[a-f0-9]{32}", conversation_id):
+                    self.send_json(400, {"error": "Choose a valid conversation."})
+                    return
+                with sqlite3.connect(DB_PATH) as database:
+                    exists = database.execute("SELECT 1 FROM conversations WHERE id=? AND owner_id=?", (conversation_id, self.request_owner)).fetchone()
+                    if not exists:
+                        self.send_json(404, {"error": "Conversation not found."})
+                        return
+                    now = int(datetime.now(timezone.utc).timestamp())
+                    if path.endswith("/rename"):
+                        title = payload.get("title")
+                        if not isinstance(title, str) or not title.strip() or len(title.strip()) > 100:
+                            self.send_json(400, {"error": "Enter a title under 100 characters."})
+                            return
+                        database.execute("UPDATE conversations SET title=?,updated_at=? WHERE id=? AND owner_id=?", (title.strip(), now, conversation_id, self.request_owner))
+                    else:
+                        archived = payload.get("archived")
+                        if not isinstance(archived, bool):
+                            self.send_json(400, {"error": "Choose whether to archive or restore this conversation."})
+                            return
+                        database.execute("UPDATE conversations SET archived_at=?,updated_at=? WHERE id=? AND owner_id=?", (now if archived else None, now, conversation_id, self.request_owner))
+                self.send_json(200, {"ok": True})
+            except (ValueError, json.JSONDecodeError):
+                self.send_json(400, {"error": "Could not update that conversation."})
+            return
         if path == "/api/conversations":
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -2305,6 +2346,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": "Keep your message under 8,000 characters."})
                 return
             message = message.strip()
+            regenerate = payload.get("regenerate") is True
+            if not message and not regenerate:
+                self.send_json(400, {"error": "Type a message first."})
+                return
             conversation_id = payload.get("conversation_id")
             if not isinstance(conversation_id, str) or not re.fullmatch(r"[a-f0-9]{32}", conversation_id):
                 self.send_json(400, {"error": "Start a new chat before sending a message."})
@@ -2354,12 +2399,22 @@ class Handler(BaseHTTPRequestHandler):
 
             with sqlite3.connect(DB_PATH) as database:
                 previous = database.execute(
-                    "SELECT role, content FROM messages WHERE owner_id=? AND conversation_id=? ORDER BY id DESC LIMIT 20",
+                    "SELECT id,role,content FROM messages WHERE owner_id=? AND conversation_id=? ORDER BY id DESC LIMIT 22",
                     (self.request_owner, conversation_id),
                 ).fetchall()
+            replaced_assistant_id = None
+            if regenerate:
+                if len(previous) < 2 or previous[0][1] != "assistant" or previous[1][1] != "user" or "[Image attached" in previous[1][2] or previous[1][2].startswith("File:"):
+                    self.send_json(400, {"error": "This response cannot be regenerated. Reattach the original file or image and ask again."})
+                    return
+                replaced_assistant_id = previous[0][0]
+                message = previous[1][2]
+                context_rows = list(reversed(previous[2:]))
+            else:
+                context_rows = list(reversed(previous))
             conversation = [{"role": "system", "content": active_system_prompt()}] + [
                 {"role": role, "content": content}
-                for role, content in reversed(previous)
+                for _, role, content in context_rows
             ]
             conversation.append({"role": "user", "content": message})
             if AI_PROVIDER == "cloudflare":
@@ -2406,7 +2461,13 @@ class Handler(BaseHTTPRequestHandler):
                             self.wfile.write(chunk)
                             self.wfile.flush()
                     answer = "".join(answer_parts)
-            save_conversation_messages(self.request_owner, conversation_id, message, answer)
+            if regenerate:
+                with sqlite3.connect(DB_PATH) as database:
+                    database.execute("DELETE FROM messages WHERE id=? AND owner_id=? AND conversation_id=?", (replaced_assistant_id, self.request_owner, conversation_id))
+                    database.execute("INSERT INTO messages(role,content,owner_id,conversation_id) VALUES('assistant',?,?,?)", (answer, self.request_owner, conversation_id))
+                    database.execute("UPDATE conversations SET updated_at=? WHERE id=? AND owner_id=?", (int(datetime.now(timezone.utc).timestamp()), conversation_id, self.request_owner))
+            else:
+                save_conversation_messages(self.request_owner, conversation_id, message, answer)
             self.wfile.write(b'{"done":true}\n')
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):

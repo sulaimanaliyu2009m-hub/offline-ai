@@ -278,6 +278,24 @@ async function ensureConversation(db, ownerId, id) {
   ).bind(id, ownerId).first();
 }
 
+function responseTextFromSseLine(line) {
+  if (!line.startsWith("data:")) return "";
+  const data = line.slice(5).trim();
+  if (!data || data === "[DONE]") return "";
+  try {
+    const part = JSON.parse(data);
+    return typeof part.response === "string"
+      ? part.response
+      : typeof part.result?.response === "string"
+        ? part.result.response
+        : typeof part.choices?.[0]?.delta?.content === "string"
+          ? part.choices[0].delta.content
+          : "";
+  } catch {
+    return "";
+  }
+}
+
 async function routeApi(request, env, owner) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -302,8 +320,9 @@ async function routeApi(request, env, owner) {
   }
 
   if (path === "/api/conversations" && method === "GET") {
+    const archived = url.searchParams.get("archived") === "true";
     const result = await env.DB.prepare(
-      "SELECT id, title, updated_at FROM conversations WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 100",
+      "SELECT id, title, created_at, updated_at, archived_at, (SELECT substr(m.content, 1, 180) FROM messages m WHERE m.conversation_id = conversations.id AND m.owner_id = conversations.owner_id ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS preview FROM conversations WHERE owner_id = ? AND archived_at IS " + (archived ? "NOT NULL" : "NULL") + " ORDER BY updated_at DESC LIMIT 100",
     ).bind(owner.id).all();
     return ownerJson({ conversations: result.results || [] }, owner);
   }
@@ -317,6 +336,27 @@ async function routeApi(request, env, owner) {
       "INSERT INTO conversations (id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     ).bind(id, owner.id, title, now, now).run();
     return ownerJson({ id, title }, owner, 201);
+  }
+
+  if (path === "/api/conversations/rename" && method === "POST") {
+    const body = await readJson(request);
+    const id = typeof body?.conversation_id === "string" ? body.conversation_id : "";
+    const title = typeof body?.title === "string" ? body.title.trim() : "";
+    if (!id || !title || title.length > 100) return ownerJson({ error: "Enter a title under 100 characters." }, owner, 400);
+    if (!await ensureConversation(env.DB, owner.id, id)) return ownerJson({ error: "Conversation not found." }, owner, 404);
+    await env.DB.prepare("UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND owner_id = ?")
+      .bind(title, Date.now(), id, owner.id).run();
+    return ownerJson({ ok: true, title }, owner);
+  }
+
+  if (path === "/api/conversations/archive" && method === "POST") {
+    const body = await readJson(request);
+    const id = typeof body?.conversation_id === "string" ? body.conversation_id : "";
+    if (!id || typeof body.archived !== "boolean") return ownerJson({ error: "Choose a conversation and archive state." }, owner, 400);
+    if (!await ensureConversation(env.DB, owner.id, id)) return ownerJson({ error: "Conversation not found." }, owner, 404);
+    await env.DB.prepare("UPDATE conversations SET archived_at = ?, updated_at = ? WHERE id = ? AND owner_id = ?")
+      .bind(body.archived ? Date.now() : null, Date.now(), id, owner.id).run();
+    return ownerJson({ ok: true }, owner);
   }
 
   if (path === "/api/conversations/delete" && method === "POST") {
@@ -368,8 +408,9 @@ async function routeApi(request, env, owner) {
     if (!env.AI) return ownerJson({ error: "Workers AI is not connected. Add the AI binding in Cloudflare settings." }, owner, 503);
     const body = await readJson(request);
     const imageData = typeof body?.image_data === "string" ? body.image_data : "";
-    const message = typeof body?.message === "string" ? body.message.trim() : "";
-    if (!message && !imageData) return ownerJson({ error: "Type a message first." }, owner, 400);
+    let message = typeof body?.message === "string" ? body.message.trim() : "";
+    const regenerate = body?.regenerate === true;
+    if (!message && !imageData && !regenerate) return ownerJson({ error: "Type a message first." }, owner, 400);
     if (message.length > MAX_PROMPT_CHARS) return ownerJson({ error: "That message is too long. Please keep it under 12,000 characters." }, owner, 413);
     let imageBytes = null;
     if (imageData) {
@@ -385,6 +426,7 @@ async function routeApi(request, env, owner) {
 
     let conversationId = typeof body.conversation_id === "string" ? body.conversation_id : "";
     let conversation = conversationId ? await ensureConversation(env.DB, owner.id, conversationId) : null;
+    if (regenerate && (!conversation || imageData)) return ownerJson({ error: "This response cannot be regenerated. Reattach the original file or image and ask again." }, owner, 400);
     if (!conversation) {
       conversationId = crypto.randomUUID();
       const now = Date.now();
@@ -394,58 +436,107 @@ async function routeApi(request, env, owner) {
     }
 
     const prior = await env.DB.prepare(
-      "SELECT role, content FROM messages WHERE conversation_id = ? AND owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 12",
+      "SELECT id, role, content FROM messages WHERE conversation_id = ? AND owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 14",
     ).bind(conversationId, owner.id).all();
-    const history = (prior.results || []).reverse().map((item) => ({ role: item.role, content: item.content }));
-    const now = Date.now();
-    await env.DB.prepare(
-      "INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'user', ?, ?)",
-    ).bind(crypto.randomUUID(), conversationId, owner.id, imageBytes ? `${message || "What is in this image?"}\n[Image attached]` : message, now).run();
+    const priorMessages = (prior.results || []).reverse();
+    let replacedAssistantId = null;
+    let history = priorMessages.map(({ role, content }) => ({ role, content }));
+    if (regenerate) {
+      const lastAssistant = priorMessages.at(-1);
+      const lastUser = priorMessages.at(-2);
+      if (lastAssistant?.role !== "assistant" || lastUser?.role !== "user" || /\[Image attached|^File:/m.test(lastUser.content)) {
+        return ownerJson({ error: "This response cannot be regenerated. Reattach the original file or image and ask again." }, owner, 400);
+      }
+      replacedAssistantId = lastAssistant.id;
+      message = lastUser.content;
+      history = priorMessages.slice(0, -2).map(({ role, content }) => ({ role, content }));
+    } else {
+      const now = Date.now();
+      await env.DB.prepare(
+        "INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'user', ?, ?)",
+      ).bind(crypto.randomUUID(), conversationId, owner.id, imageBytes ? `${message || "What is in this image?"}\n[Image attached]` : message, now).run();
+    }
 
-    let answer;
-    try {
-      if (imageBytes) {
+    if (imageBytes) {
+      let answer;
+      try {
         const generated = await env.AI.run(IMAGE_CHAT_MODEL, {
           image: imageBytes,
           prompt: message || "Describe this image and point out its main details.",
           max_tokens: 600,
         });
-        answer = generated?.description || generated?.response || generated?.result?.response || "I couldn't analyze that image. Please try another one.";
-      } else {
-        const generated = await env.AI.run(MODEL, {
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            ...history,
-            { role: "user", content: message },
-          ],
-          max_tokens: 700,
-        });
-        answer = typeof generated === "string"
-          ? generated
-          : generated?.response || generated?.result?.response || "I couldn't produce an answer. Please try again.";
+        answer = generated?.description || generated?.response || generated?.result?.response || "I couldn't analyze this image. Please try another one.";
+      } catch (error) {
+        console.error("Workers AI image question failed", error);
+        return ownerJson({ error: "The AI request failed. Check the Workers AI binding and try again." }, owner, 502);
       }
+      const savedAt = Date.now();
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'assistant', ?, ?)")
+          .bind(crypto.randomUUID(), conversationId, owner.id, answer, savedAt),
+        env.DB.prepare("UPDATE conversations SET updated_at = ?, title = CASE WHEN title = 'New chat' THEN ? ELSE title END WHERE id = ? AND owner_id = ?")
+          .bind(savedAt, message.slice(0, 60), conversationId, owner.id),
+      ]);
+      const imageAnswerStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`${JSON.stringify({ token: answer })}\n`));
+          controller.close();
+        },
+      });
+      const headers = new Headers({ "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" });
+      if (owner.cookie) headers.append("Set-Cookie", owner.cookie);
+      return new Response(imageAnswerStream, { headers });
+    }
+
+    let modelStream;
+    try {
+      modelStream = await env.AI.run(MODEL, {
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...history,
+          { role: "user", content: message },
+        ],
+        max_tokens: 700,
+        stream: true,
+      });
     } catch (error) {
       console.error("Workers AI request failed", error);
       return ownerJson({ error: "The AI request failed. Check the Workers AI binding and try again." }, owner, 502);
     }
+    if (!modelStream || typeof modelStream.pipeThrough !== "function") {
+      return ownerJson({ error: "The AI service did not start a response stream. Please try again." }, owner, 502);
+    }
 
-    const savedAt = Date.now();
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'assistant', ?, ?)",
-      ).bind(crypto.randomUUID(), conversationId, owner.id, answer, savedAt),
-      env.DB.prepare("UPDATE conversations SET updated_at = ?, title = CASE WHEN title = 'New chat' THEN ? ELSE title END WHERE id = ? AND owner_id = ?")
-        .bind(savedAt, message.slice(0, 60), conversationId, owner.id),
-    ]);
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(`${JSON.stringify({ token: answer })}\n`));
-        controller.close();
+    const decoder = new TextDecoder();
+    let pendingLine = "";
+    let answer = "";
+    const responseStream = modelStream.pipeThrough(new TransformStream({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+        pendingLine += decoder.decode(chunk, { stream: true });
+        const lines = pendingLine.split("\n");
+        pendingLine = lines.pop() || "";
+        for (const line of lines) answer += responseTextFromSseLine(line.replace(/\r$/, ""));
       },
-    });
-    const headers = new Headers({ "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" });
+      async flush() {
+        pendingLine += decoder.decode();
+        if (pendingLine) answer += responseTextFromSseLine(pendingLine.replace(/\r$/, ""));
+        if (!answer) return;
+        const savedAt = Date.now();
+        const writes = [];
+        if (replacedAssistantId) writes.push(env.DB.prepare("DELETE FROM messages WHERE id = ? AND owner_id = ?").bind(replacedAssistantId, owner.id));
+        writes.push(
+          env.DB.prepare("INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'assistant', ?, ?)")
+            .bind(crypto.randomUUID(), conversationId, owner.id, answer, savedAt),
+          env.DB.prepare("UPDATE conversations SET updated_at = ?, title = CASE WHEN title = 'New chat' THEN ? ELSE title END WHERE id = ? AND owner_id = ?")
+            .bind(savedAt, message.slice(0, 60), conversationId, owner.id),
+        );
+        await env.DB.batch(writes);
+      },
+    }));
+    const headers = new Headers({ "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store, no-transform" });
     if (owner.cookie) headers.append("Set-Cookie", owner.cookie);
-    return new Response(stream, { headers });
+    return new Response(responseStream, { headers });
   }
 
   if (path === "/api/generate-image" && method === "POST") {

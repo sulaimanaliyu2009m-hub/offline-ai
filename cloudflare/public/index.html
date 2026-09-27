@@ -13,7 +13,7 @@
   <style>
     :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202123; background: #f8f8fb; --ink:#202123; --muted:#777980; --line:#e7e7ed; --accent:#6258c9; --surface:#fff; --sidebar:#f4f4f7; --soft:#efeff4; --shadow:0 12px 36px #2523410c; }
     * { box-sizing: border-box; }
-    body { margin: 0; height: 100vh; height:100dvh; display: flex; overflow: hidden; background:var(--surface); }
+    body { margin: 0; height: 100vh; height:100dvh; min-height:100svh; display: flex; overflow: hidden; background:var(--surface); }
     button, textarea { font: inherit; }
     .sidebar { width: 260px; flex: 0 0 260px; background: var(--sidebar); border-right: 1px solid var(--line); padding: 17px 13px; display: flex; flex-direction: column; overflow-y:auto; }
     .brand { display: flex; align-items: center; gap: 11px; padding: 8px 10px 24px; font-weight: 650; font-size: 17px; letter-spacing:-.35px; }
@@ -25,8 +25,9 @@
     .new-chat-button:hover { background:#e2f0ed; }
     .nav-button.active { background:#e9e7f7; border-color:#e1def5; color:#403b78; font-weight:600; }
     .nav-button.history-active { background:#e7f3f1; border-color:#d7e9e5; color:#286e67; font-weight:600; }
-    #history-list { display:flex; flex-direction:column; gap:3px; max-height:min(42vh,390px); overflow:auto; padding:2px 2px 8px; }
+    #history-list { display:flex; flex-direction:column; gap:3px; max-height:min(42vh,390px); overflow:hidden; padding:2px 2px 8px; }
     #history-list[hidden] { display:none; }
+    #history-items { min-height:0; overflow-y:auto; padding-bottom:8px; }
     .history-row { display:flex; align-items:center; gap:2px; min-width:0; }
     .history-empty { padding:8px 10px; color:#888995; font-size:12px; }
     .history-item { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:8px 10px; border:1px solid transparent; border-radius:9px; background:transparent; color:#5d5f6b; text-align:left; font-size:12px; cursor:pointer; }
@@ -41,9 +42,10 @@
     .history-menu button { width:100%; padding:8px 10px; border:0; border-radius:7px; background:transparent; color:#a13e4d; text-align:left; cursor:pointer; }
     .history-menu button:hover { background:#faeeee; }
     .main { min-width: 0; flex: 1; display: flex; flex-direction: column; background: var(--surface); }
-    .topbar { height: 62px; flex: 0 0 62px; display: flex; align-items: center; gap:10px; padding: 0 26px; border-bottom: 1px solid #f0f0f3; font-size: 14px; font-weight: 650; background:#ffffffed; }
+    .topbar { min-height: 62px; flex: 0 0 62px; display: flex; align-items: center; gap:10px; padding: 0 26px; padding-top:env(safe-area-inset-top, 0px); border-bottom: 1px solid #f0f0f3; font-size: 14px; font-weight: 650; background:#ffffffed; }
     .topbar-name { display:flex; align-items:center; gap:8px; }
     .topbar-brandmark { display:none; }
+    .conversation-title { max-width:min(48vw,520px); overflow:hidden; color:var(--muted); font-size:13px; font-weight:450; text-overflow:ellipsis; white-space:nowrap; }
     #menu-toggle { display:none; width:36px; height:36px; border:0; border-radius:10px; background:transparent; color:#555666; cursor:pointer; font-size:19px; }
     .model-tag { color: #777980; font-size: 12px; font-weight: 450; margin-left: 8px; }
     .chat-area { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior:smooth; }
@@ -72,8 +74,9 @@
     .message-tools button:focus-visible,.nav-button:focus-visible,#menu-toggle:focus-visible,#chat button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     .generation-status { color:var(--muted); font-size:12px; }
     #stop-button { display:none; width:36px; height:36px; flex:0 0 36px; border:0; border-radius:50%; background:#f4e9eb; color:#9d3d4d; cursor:pointer; }
-    body.generating #stop-button { display:grid; place-items:center; }
-    body.generating #send-button { display:none; }
+    body.generating.can-stop #stop-button { display:grid; place-items:center; }
+    body.generating.can-stop #send-button { display:none; }
+    body.generating:not(.can-stop) #send-button { cursor:wait; }
     #starter-prompts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; width:min(100%,560px); margin:28px auto 0; }
     .starter-prompt { padding:13px 15px; text-align:left; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--ink); cursor:pointer; }
     .starter-prompt:hover { border-color:color-mix(in srgb,var(--accent) 40%,var(--line)); background:var(--soft); }
@@ -85,12 +88,27 @@
     .desktop-toggle { width:34px;height:34px;border:0;border-radius:9px;background:transparent;color:var(--muted);cursor:pointer; }
     .desktop-toggle:hover { background:var(--soft); }
     #history-search { width:calc(100% - 12px); margin:2px 6px 6px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); font:inherit; font-size:12px; }
+    .history-filters { display:flex; gap:5px; padding:0 6px 7px; }
+    .history-filters button { flex:1; padding:6px 7px; border:1px solid var(--line); border-radius:8px; color:var(--muted); background:var(--surface); font-size:11px; cursor:pointer; }
+    .history-filters button[aria-pressed="true"] { color:var(--accent); border-color:color-mix(in srgb,var(--accent) 35%,var(--line)); background:var(--soft); }
+    .history-group-label { padding:10px 9px 4px; color:var(--muted); font-size:10px; font-weight:650; }
+    .history-meta { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 10px 6px; color:var(--muted); font-size:10px; }
+    .history-menu button { color:var(--ink); }
+    .history-menu button.danger { color:#a13e4d; }
+    .utility-dialog { width:min(420px,calc(100vw - 28px)); border:1px solid var(--line); border-radius:18px; padding:24px; color:var(--ink); background:var(--surface); box-shadow:0 28px 90px #161b352e; }
+    .utility-dialog::backdrop { background:#15192dcc; backdrop-filter:blur(4px); }
+    .utility-dialog h2 { margin:0 0 8px; font-size:20px; }
+    .utility-dialog p { color:var(--muted); font-size:13px; line-height:1.5; }
+    .utility-dialog input { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; }
+    .utility-dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+    .utility-dialog-actions button { border:1px solid var(--line); border-radius:9px; padding:9px 12px; color:var(--ink); background:var(--surface); cursor:pointer; }
+    .utility-dialog-actions button[type="submit"] { color:white; border-color:var(--accent); background:var(--accent); }
     .chat-image { display:block; max-width:min(100%, 360px); max-height:320px; margin-top:10px; border-radius:12px; }
     .attachment-chip { display:inline-block; margin-top:8px; padding:6px 9px; border:1px solid var(--line); border-radius:8px; background:#fafafa; color:#555; font-size:12px; }
     .message-tools { margin-top:7px; }
     .speak-button { border:0; border-radius:8px; padding:5px 8px; background:#f3f3f3; color:#555; cursor:pointer; font-size:12px; }
     .speak-button:disabled { opacity:.5; cursor:default; }
-    .composer-wrap { flex: 0 0 auto; padding: 14px 24px 18px; background: linear-gradient(#ffffffdb, #fff 30%); }
+    .composer-wrap { flex: 0 0 auto; padding: 14px 24px calc(18px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(#ffffffdb, #fff 30%); }
     #attachment-preview { width:min(100%, 770px); margin:0 auto 8px; padding:8px 10px; border:1px solid var(--line); border-radius:12px; display:flex; align-items:center; gap:10px; color:var(--muted); font-size:12px; }
     #attachment-preview[hidden] { display:none; }
     #attachment-preview img { width:54px; height:54px; object-fit:cover; border-radius:8px; }
@@ -128,6 +146,9 @@
     #remove-animation-image { background:#f0eff5; color:#414150; }
     .download-link { display:inline-flex; margin-top:10px; padding:9px 13px; border-radius:10px; background:var(--accent-soft); color:var(--accent); font-weight:600; text-decoration:none; }
     .download-link:hover { filter:brightness(.97); }
+    .result-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .result-actions button { border:1px solid var(--line); border-radius:9px; padding:8px 11px; color:var(--ink); background:var(--surface); cursor:pointer; font:inherit; font-size:12px; }
+    .result-actions button:hover { background:var(--soft); }
     #account-dialog { width:min(460px, calc(100vw - 28px)); border:1px solid #e6e8f0; border-radius:24px; padding:30px; box-shadow:0 28px 90px #161b352e; color:#202334; background:linear-gradient(145deg,#fff 0%,#fbfbff 100%); }
     #account-dialog::backdrop { background:#15192dcc; backdrop-filter:blur(5px); }
     #account-dialog h2 { margin:6px 0 7px; font-size:25px; letter-spacing:-.6px; }
@@ -215,14 +236,14 @@
       .sidebar.open { transform:translateX(0); }
       #sidebar-backdrop.open { display:block; position:fixed; inset:0; z-index:29; background:#17162b70; }
       .history-options { opacity:1; }
-      .topbar { height:56px; flex-basis:56px; padding:0 11px; gap:5px; }
+      .topbar { min-height:56px; height:auto; flex-basis:56px; padding:env(safe-area-inset-top, 0px) 11px 0; gap:5px; }
       #menu-toggle { display:block; }
       #desktop-sidebar-toggle { display:none; }
       .topbar-name { font-size:14px; }
       .topbar-brandmark { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:9px; color:white; background:linear-gradient(145deg,#6158d0,#9b72d7); }
       .model-tag { display:none; }
       #messages { padding:18px 16px 28px; }
-      .composer-wrap { padding:10px 12px 14px; }
+      .composer-wrap { padding:10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
       #create-panel,#settings-panel { padding:25px 15px 38px; }
       .create-card { padding:18px; border-radius:16px; }
       .image-upload-box { grid-template-columns:1fr; }
@@ -242,15 +263,15 @@
     <button class="nav-button active" id="chat-tab" aria-label="Chat" title="Chat">✳ &nbsp; <span class="nav-label">Chat</span></button>
     <button class="nav-button" id="create-tab" aria-label="Images and animation" title="Images and animation">▧ &nbsp; <span class="nav-label">Image & animation</span></button>
     <button class="nav-button" id="history-tab" aria-label="History" title="History" aria-expanded="false" aria-controls="history-list">◷ &nbsp; <span class="nav-label">History</span></button>
-    <nav id="history-list" aria-label="Saved conversations" hidden><input id="history-search" type="search" placeholder="Search chats" aria-label="Search conversations"><div class="history-empty">Your conversations will appear here.</div></nav>
+    <nav id="history-list" aria-label="Saved conversations" hidden><input id="history-search" type="search" placeholder="Search chats" aria-label="Search conversations"><div class="history-filters" role="group" aria-label="History filter"><button id="recent-history-filter" type="button" aria-pressed="true">Recent</button><button id="archived-history-filter" type="button" aria-pressed="false">Archived</button></div><div id="history-items"><div class="history-empty">Your conversations will appear here.</div></div></nav>
     <button class="nav-button" id="settings-tab" aria-label="Settings" title="Settings">⚙ &nbsp; <span class="nav-label">Settings</span></button>
     <button class="nav-button" id="install-app" aria-label="Install app" title="Install app" hidden>⇩ &nbsp; <span class="nav-label">Install app</span></button>
     <button class="nav-button account-button" id="account-button" aria-label="Account" title="Account">♙ &nbsp; <span class="nav-label">Account</span></button>
   </aside>
   <main class="main">
-    <header class="topbar"><button id="desktop-sidebar-toggle" class="desktop-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">☰</button><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span></header>
+    <header class="topbar"><button id="desktop-sidebar-toggle" class="desktop-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">☰</button><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span><span id="conversation-title" class="conversation-title" aria-live="polite"></span></header>
     <section class="chat-area" id="chat-area">
-      <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><div id="starter-prompts"><button type="button" class="starter-prompt" data-starter="Explain a difficult idea in simple terms">✦ &nbsp; Explain something</button><button type="button" class="starter-prompt" data-starter="Help me write a clear, polished message about ">✎ &nbsp; Help me write</button><button type="button" class="starter-prompt" data-starter="Help me debug this code: ">⌘ &nbsp; Debug code</button><button type="button" class="starter-prompt" data-starter="Give me a few creative ideas for ">✧ &nbsp; Brainstorm ideas</button></div></div>
+      <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><div id="starter-prompts"><button type="button" class="starter-prompt" data-starter="Explain a difficult idea in simple terms">✦ &nbsp; Explain something</button><button type="button" class="starter-prompt" data-starter="Help me write a clear, polished message about ">✎ &nbsp; Help me write</button><button type="button" class="starter-prompt" data-starter="Help me debug this code: ">⌘ &nbsp; Debug code</button><button type="button" class="starter-prompt" data-starter="Give me a few creative ideas for ">✧ &nbsp; Brainstorm ideas</button><button type="button" class="starter-prompt" data-starter="Summarize this file for my exam." data-starter-action="upload">▤ &nbsp; Analyze a file</button><button type="button" class="starter-prompt" data-starter-action="create-image">▧ &nbsp; Create an image</button></div></div>
       <div id="messages" aria-live="polite"></div>
     </section>
     <section id="create-panel">
@@ -282,16 +303,19 @@
     </section>
     <section id="settings-panel" aria-labelledby="settings-heading">
       <h1 id="settings-heading">Settings</h1>
+      <div class="settings-card"><h2>General</h2><p>Amiir AI follows the language you use in chat. Spoken replies use a voice available in your browser.</p></div>
       <div class="settings-card"><h2>Appearance</h2>
         <label for="theme-setting">Theme</label><select id="theme-setting"><option value="system">Use device setting</option><option value="light">Light</option><option value="dark">Dark</option></select>
         <label style="display:block;margin:16px 0 9px">Accent color</label><div class="accent-options" role="group" aria-label="Accent color"><button class="accent-choice" type="button" data-accent-choice="violet" aria-pressed="true"><span class="accent-dot" style="--choice:#6258c9"></span>Violet</button><button class="accent-choice" type="button" data-accent-choice="teal" aria-pressed="false"><span class="accent-dot" style="--choice:#287d72"></span>Teal</button><button class="accent-choice" type="button" data-accent-choice="blue" aria-pressed="false"><span class="accent-dot" style="--choice:#3474c5"></span>Blue</button><button class="accent-choice" type="button" data-accent-choice="rose" aria-pressed="false"><span class="accent-dot" style="--choice:#b95177"></span>Rose</button></div>
         <label for="text-size-setting" style="display:block;margin:16px 0 8px">Chat text size</label><select id="text-size-setting"><option value="standard">Standard</option><option value="large">Large</option></select>
       </div>
-      <div class="settings-card"><h2>Chat and voice</h2>
+      <div class="settings-card"><h2>Chat</h2>
         <label class="setting-line"><input id="enter-to-send-setting" type="checkbox"> Press Enter to send (Shift+Enter makes a new line)</label>
-        <label class="setting-line"><input id="speak-setting" type="checkbox"> Speak replies aloud automatically</label>
         <label class="setting-line"><input id="reduced-motion-setting" type="checkbox"> Reduce animations</label>
       </div>
+      <div class="settings-card"><h2>Voice</h2><label class="setting-line"><input id="speak-setting" type="checkbox"> Speak replies aloud automatically</label></div>
+      <div class="settings-card"><h2>Privacy</h2><p>Conversations are saved to your Amiir AI guest session or account. Uploaded files are processed for your request; the public Worker does not save their contents in chat history. You can export or delete conversations below.</p></div>
+      <div class="settings-card"><h2>Account</h2><p>Manage sign-in, registration, and password recovery.</p><div class="settings-actions"><button type="button" id="settings-account">Open account</button></div></div>
       <div class="settings-card"><h2>Your conversations</h2><div class="settings-actions"><button type="button" id="export-chats">Export conversations</button><button type="button" class="danger-action" id="delete-current-chat">Delete current chat</button><button type="button" id="reset-settings">Reset preferences</button></div><p id="settings-status" role="status" aria-live="polite"></p></div>
     </section>
     <dialog id="account-dialog">
@@ -306,13 +330,18 @@
         <div id="password-panel"><label for="account-password">Password</label><div class="password-wrap"><input id="account-password" type="password" autocomplete="current-password" minlength="8" maxlength="128" placeholder="Enter your password" required><button class="password-toggle" type="button" data-toggle-password="account-password" aria-label="Show password" aria-pressed="false">Show</button></div>
         <div id="confirm-password-panel" hidden><label for="account-password-confirm">Confirm password</label><div class="password-wrap"><input id="account-password-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Re-enter your password"><button class="password-toggle" type="button" data-toggle-password="account-password-confirm" aria-label="Show confirmation password" aria-pressed="false">Show</button></div></div>
         <p id="password-hint" hidden>Use 8+ characters with uppercase and lowercase letters, a number, and a symbol.</p><button id="forgot-password" class="account-link" type="button">Forgot password?</button></div></div>
-        <div id="otp-section" hidden><p id="otp-destination">We sent a code to your contact.</p><label for="account-otp">Verification code</label><input id="account-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="Enter 6-digit code"><p class="account-foot">The code expires in 5 minutes.</p><div class="otp-actions"><button id="verify-otp" type="button">Verify code</button><button id="resend-otp" type="button">Send a new code</button></div><button id="edit-signup" class="account-guest" type="button">Change email or phone</button></div>
-        <div id="reset-section" hidden><p id="reset-destination">If the account exists and delivery is configured, a code will arrive shortly.</p><label for="reset-code">Verification code</label><input id="reset-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="Enter 6-digit code"><label for="reset-new-password">New password</label><div class="password-wrap"><input id="reset-new-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="8+ chars: upper, lower, number, symbol"><button class="password-toggle" type="button" data-toggle-password="reset-new-password" aria-label="Show new password" aria-pressed="false">Show</button></div><label for="reset-password-confirm">Confirm new password</label><div class="password-wrap"><input id="reset-password-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Re-enter new password"><button class="password-toggle" type="button" data-toggle-password="reset-password-confirm" aria-label="Show confirmation password" aria-pressed="false">Show</button></div><p class="account-foot">Use uppercase and lowercase letters, a number, and a symbol. Code expires in 5 minutes.</p><div class="otp-actions"><button id="reset-submit" type="button">Save new password</button><button id="reset-resend" type="button">Send a new code</button></div><button id="reset-back" class="account-guest" type="button">Back to sign in</button></div>
+        <div id="otp-section" hidden><p id="otp-destination">We sent a code to your contact.</p><label for="account-otp">Verification code</label><input id="account-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="Enter 6-digit code"><p class="account-foot">Code expires in <span id="signup-countdown">05:00</span>.</p><div class="otp-actions"><button id="verify-otp" type="button">Verify code</button><button id="resend-otp" type="button">Send a new code</button></div><button id="edit-signup" class="account-guest" type="button">Change email address</button></div>
+        <div id="reset-section" hidden><p id="reset-destination">If the account exists and delivery is configured, a code will arrive shortly.</p><label for="reset-code">Verification code</label><input id="reset-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="Enter 6-digit code"><p class="account-foot">Code expires in <span id="reset-countdown">05:00</span>.</p><label for="reset-new-password">New password</label><div class="password-wrap"><input id="reset-new-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="8+ chars: upper, lower, number, symbol"><button class="password-toggle" type="button" data-toggle-password="reset-new-password" aria-label="Show new password" aria-pressed="false">Show</button></div><label for="reset-password-confirm">Confirm new password</label><div class="password-wrap"><input id="reset-password-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Re-enter new password"><button class="password-toggle" type="button" data-toggle-password="reset-password-confirm" aria-label="Show confirmation password" aria-pressed="false">Show</button></div><p class="account-foot">Use uppercase and lowercase letters, a number, and a symbol.</p><div class="otp-actions"><button id="reset-submit" type="button">Save new password</button><button id="reset-resend" type="button">Send a new code</button></div><button id="reset-back" class="account-guest" type="button">Back to sign in</button></div>
         <p id="account-message" role="status" aria-live="polite"></p>
         <button id="account-submit" class="account-primary" type="submit">Sign in</button>
       </form>
       <button id="sign-out" class="account-primary" type="button" hidden>Sign out</button>
       <button id="continue-guest" class="account-guest" type="button">Continue as guest</button>
+    </dialog>
+    <dialog class="utility-dialog" id="rename-dialog" aria-labelledby="rename-heading">
+      <h2 id="rename-heading">Rename conversation</h2>
+      <p>Choose a short title that helps you find this chat later.</p>
+      <form id="rename-form"><label for="rename-title">Conversation title</label><input id="rename-title" maxlength="100" required autocomplete="off"><div class="utility-dialog-actions"><button id="rename-cancel" type="button">Cancel</button><button type="submit">Save title</button></div></form>
     </dialog>
     <div class="composer-wrap">
       <p id="voice-status" role="status" aria-live="polite"></p>
@@ -334,6 +363,8 @@
     let activeConversationId = null;
     let selectedChatFile = null;
     let selectedChatImageUrl = null;
+    let conversationCache = [];
+    let showArchivedHistory = false;
     const attachmentDescription = document.querySelector('#attachment-description');
     const autoSpeak = document.querySelector('#auto-speak');
     autoSpeak.checked = localStorage.getItem('offlineAiSpeakReplies') === 'true';
@@ -482,6 +513,7 @@
     const historyTab = document.querySelector('#history-tab');
     const historyList = document.querySelector('#history-list');
     historyTab.addEventListener('click', () => {
+      closeSidebar();
       setView('chat');
       const expanded = historyList.hidden;
       historyList.hidden = !expanded;
@@ -489,12 +521,29 @@
       historyTab.setAttribute('aria-expanded', String(expanded));
       if (expanded) document.querySelector('#chat-tab').classList.remove('active');
     });
-    document.querySelector('#history-search').addEventListener('input', () => refreshConversationList().catch(error => { voiceStatus.textContent=error.message; }));
+    document.querySelector('#history-search').addEventListener('input', renderConversationList);
+    document.querySelector('#recent-history-filter').addEventListener('click', () => {
+      showArchivedHistory = false;
+      document.querySelector('#recent-history-filter').setAttribute('aria-pressed','true');
+      document.querySelector('#archived-history-filter').setAttribute('aria-pressed','false');
+      refreshConversationList().catch(error => { voiceStatus.textContent=error.message; });
+    });
+    document.querySelector('#archived-history-filter').addEventListener('click', () => {
+      showArchivedHistory = true;
+      document.querySelector('#recent-history-filter').setAttribute('aria-pressed','false');
+      document.querySelector('#archived-history-filter').setAttribute('aria-pressed','true');
+      refreshConversationList().catch(error => { voiceStatus.textContent=error.message; });
+    });
     document.querySelectorAll('[data-starter]').forEach(button => button.addEventListener('click', () => {
       input.value = button.dataset.starter;
       input.focus();
       input.dispatchEvent(new Event('input', {bubbles:true}));
+      if(button.dataset.starterAction==='upload') imagePicker.click();
     }));
+    document.querySelector('[data-starter-action="create-image"]').addEventListener('click',()=>{
+      document.querySelector('#create-tab').click();
+      document.querySelector('#image-prompt').focus();
+    });
     document.querySelectorAll('[data-create-tool]').forEach(button => button.addEventListener('click', () => {
       const motion = button.dataset.createTool === 'motion';
       document.querySelector('#image-tool').hidden = motion;
@@ -511,7 +560,40 @@
     const accountDialog = document.querySelector('#account-dialog');
     const accountMessage = document.querySelector('#account-message');
     let accountMode = 'login';
+    let signupCountdownTimer = null;
+    let resetCountdownTimer = null;
+    let signupResendAt = 0;
+    let resetResendAt = 0;
+    function startCodeCountdown(kind) {
+      const signup = kind === 'signup';
+      const display = document.querySelector(signup ? '#signup-countdown' : '#reset-countdown');
+      const resend = document.querySelector(signup ? '#resend-otp' : '#reset-resend');
+      const previous = signup ? signupCountdownTimer : resetCountdownTimer;
+      if (previous) clearInterval(previous);
+      const expiresAt = Date.now() + 5 * 60 * 1000;
+      const resendAt = Date.now() + 60 * 1000;
+      if (signup) signupResendAt = resendAt; else resetResendAt = resendAt;
+      const tick = () => {
+        const now = Date.now();
+        const seconds = Math.max(0, Math.ceil((expiresAt - now) / 1000));
+        display.textContent = String(Math.floor(seconds / 60)).padStart(2,'0') + ':' + String(seconds % 60).padStart(2,'0');
+        const wait = Math.max(0, Math.ceil(((signup ? signupResendAt : resetResendAt) - now) / 1000));
+        resend.disabled = wait > 0 || (signup && seconds === 0);
+        resend.textContent = seconds === 0 && signup ? 'Code expired' : wait ? `Resend in ${wait}s` : 'Send a new code';
+        if (seconds === 0 && wait === 0) {
+          const timer = signup ? signupCountdownTimer : resetCountdownTimer;
+          if (timer) clearInterval(timer);
+          if (signup) signupCountdownTimer = null; else resetCountdownTimer = null;
+        }
+      };
+      tick();
+      const timer = setInterval(tick, 1000);
+      if (signup) signupCountdownTimer = timer; else resetCountdownTimer = timer;
+    }
     function setAccountMode(mode) {
+      if (signupCountdownTimer) clearInterval(signupCountdownTimer);
+      if (resetCountdownTimer) clearInterval(resetCountdownTimer);
+      signupCountdownTimer = resetCountdownTimer = null;
       accountMode = mode;
       document.querySelectorAll('.password-toggle').forEach(toggle => {
         const field = document.getElementById(toggle.dataset.togglePassword);
@@ -576,11 +658,13 @@
       }
     }
     document.querySelector('#account-button').addEventListener('click', async () => {
+      closeSidebar();
       accountMessage.textContent = '';
       await refreshAccount();
       if (document.querySelector('#account-status').hidden) setAccountMode('login');
       accountDialog.showModal();
     });
+    document.querySelector('#settings-account').addEventListener('click',()=>document.querySelector('#account-button').click());
     document.querySelector('#account-close').addEventListener('click', () => accountDialog.close());
     async function accountAction(action) {
       if (action === 'signup' && document.querySelector('#account-password').value !== document.querySelector('#account-password-confirm').value) {
@@ -610,6 +694,7 @@
           document.querySelector('#account-details').textContent = '';
           document.querySelector('#account-details').hidden = true;
           document.querySelector('#otp-destination').textContent = 'We sent a verification code to ' + document.querySelector('#account-contact').value.trim() + '.';
+          startCodeCountdown('signup');
           accountMessage.textContent = data.message;
         } else if (action === 'reset') {
           document.querySelector('#credentials-panel').hidden = true;
@@ -620,6 +705,7 @@
           document.querySelector('#account-heading').textContent = 'Reset your password';
           document.querySelector('#account-details').hidden = true;
           document.querySelector('#reset-destination').textContent = data.message;
+          startCodeCountdown('reset');
           accountMessage.textContent = '';
         } else {
           document.querySelector('#account-password').value = '';
@@ -648,21 +734,33 @@
       accountMessage.textContent = '';
     });
     async function otpAction(action) {
+      const codeField = document.querySelector('#account-otp');
+      if (action === 'verify' && !/^\d{6}$/.test(codeField.value)) {
+        accountMessage.textContent = 'Enter the 6-digit code from your email.';
+        codeField.focus();
+        return;
+      }
       const button = document.querySelector(action === 'verify' ? '#verify-otp' : '#resend-otp');
       button.disabled = true;
       try {
         const response = await fetch('/api/account/' + action, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({contact:document.querySelector('#account-contact').value.trim(), code:document.querySelector('#account-otp').value})});
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Verification failed.');
-        if (action === 'resend') accountMessage.textContent = data.message;
+        if (action === 'resend') { startCodeCountdown('signup'); accountMessage.textContent = data.message; }
         else { document.querySelector('#account-password').value = ''; document.querySelector('#account-otp').value = ''; setAccountMode('login'); await refreshAccount(); await loadHistory(); accountDialog.close(); }
       } catch (error) { accountMessage.textContent = error.message; }
-      finally { button.disabled = false; }
+      finally { button.disabled = action === 'resend' && Date.now() < signupResendAt; }
     }
     document.querySelector('#verify-otp').addEventListener('click', () => otpAction('verify'));
     document.querySelector('#resend-otp').addEventListener('click', () => otpAction('resend'));
+    document.querySelector('#account-otp').addEventListener('input', event => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g,'').slice(0,6); });
     document.querySelector('#edit-signup').addEventListener('click', () => setAccountMode('signup'));
     async function resetAction(action) {
+      if (action === 'reset-verify' && !/^\d{6}$/.test(document.querySelector('#reset-code').value)) {
+        accountMessage.textContent = 'Enter the 6-digit reset code from your email.';
+        document.querySelector('#reset-code').focus();
+        return;
+      }
       if (action === 'reset-verify' && document.querySelector('#reset-new-password').value !== document.querySelector('#reset-password-confirm').value) {
         accountMessage.textContent = 'The new passwords do not match.';
         return;
@@ -675,13 +773,14 @@
         const response = await fetch('/api/account/' + action, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Password reset failed.');
-        if (action === 'reset-resend') accountMessage.textContent = data.message;
+        if (action === 'reset-resend') { startCodeCountdown('reset'); accountMessage.textContent = data.message; }
         else { document.querySelector('#account-password').value=''; document.querySelector('#reset-new-password').value=''; document.querySelector('#reset-password-confirm').value=''; setAccountMode('login'); await refreshAccount(); accountDialog.close(); }
       } catch (error) { accountMessage.textContent = error.message; }
-      finally { button.disabled = false; }
+      finally { button.disabled = action === 'reset-resend' && Date.now() < resetResendAt; }
     }
     document.querySelector('#reset-submit').addEventListener('click', () => resetAction('reset-verify'));
     document.querySelector('#reset-resend').addEventListener('click', () => resetAction('reset-resend'));
+    document.querySelector('#reset-code').addEventListener('input', event => { event.currentTarget.value = event.currentTarget.value.replace(/\D/g,'').slice(0,6); });
     document.querySelector('#reset-back').addEventListener('click', () => setAccountMode('login'));
     document.querySelector('#account-form').addEventListener('submit', event => {
       event.preventDefault();
@@ -721,6 +820,14 @@
         result.append(media);
         const link = document.createElement('a'); link.href = data.url; link.className='download-link'; link.download = endpoint.includes('generate-image') ? 'amiir-ai-image.jpg' : 'amiir-ai-result'; link.textContent = endpoint.includes('generate-image') ? 'Download image' : 'Download';
         result.append(link);
+        if(endpoint.includes('generate-image')){
+          const actions=document.createElement('div'); actions.className='result-actions';
+          const regenerate=document.createElement('button'); regenerate.type='button'; regenerate.textContent='Generate another';
+          regenerate.addEventListener('click',()=>runCreate(endpoint,button,result,body));
+          const remove=document.createElement('button'); remove.type='button'; remove.textContent='Remove image'; remove.setAttribute('aria-label','Remove generated image');
+          remove.addEventListener('click',()=>result.replaceChildren());
+          actions.append(regenerate,remove); result.append(actions);
+        }
       } catch (error) { result.textContent = 'Error: ' + error.message; }
       finally { button.disabled = false; }
     }
@@ -815,11 +922,16 @@
         await stopped;
         stream.getTracks().forEach(track => track.stop());
         const url = URL.createObjectURL(new Blob(chunks, {type:'video/webm'}));
+        if(result.dataset.objectUrl) URL.revokeObjectURL(result.dataset.objectUrl);
+        result.dataset.objectUrl=url;
         result.textContent = '';
         const video = document.createElement('video'); video.src = url; video.controls = true; video.loop = true;
         result.append(video);
         const download = document.createElement('a'); download.href = url; download.className='download-link'; download.download = 'amiir-ai-motion.webm'; download.textContent = 'Download animation';
         result.append(download);
+        const remove=document.createElement('button'); remove.type='button'; remove.className='download-link'; remove.textContent='Remove animation';
+        remove.addEventListener('click',()=>{URL.revokeObjectURL(url);delete result.dataset.objectUrl;result.replaceChildren();});
+        result.append(remove);
         URL.revokeObjectURL(image.src);
       } catch (error) { result.textContent = 'Could not create the clip in this browser: ' + error.message; }
       finally { button.disabled = false; }
@@ -926,40 +1038,126 @@
         listen.addEventListener('click', () => speakText(body.dataset.raw || body.textContent, listen));
         const copy = document.createElement('button'); copy.type='button'; copy.textContent='Copy'; copy.setAttribute('aria-label','Copy assistant response');
         copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(body.dataset.raw || ''); copy.textContent='Copied'; setTimeout(()=>copy.textContent='Copy',1200); } catch { voiceStatus.textContent='Could not copy the response in this browser.'; } });
-        tools.append(copy, listen);
+        const regenerate=document.createElement('button'); regenerate.type='button'; regenerate.textContent='Regenerate'; regenerate.setAttribute('aria-label','Regenerate assistant response');
+        regenerate.addEventListener('click',()=>regenerateAssistant(row,body,regenerate));
+        tools.append(copy, listen, regenerate);
         row.append(tools);
         body.speakButton = listen;
+      } else {
+        const tools = document.createElement('div');
+        tools.className='message-tools';
+        const copy=document.createElement('button'); copy.type='button'; copy.textContent='Copy'; copy.setAttribute('aria-label','Copy your message');
+        copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(content);copy.textContent='Copied';setTimeout(()=>copy.textContent='Copy',1200);}catch{voiceStatus.textContent='Could not copy that message in this browser.';}});
+        tools.append(copy);
+        row.append(tools);
       }
       messages.append(row);
       document.querySelector('#chat-area').scrollTop = document.querySelector('#chat-area').scrollHeight;
       return body;
     }
+    function renderConversationList() {
+      const list = document.querySelector('#history-items');
+      const activeConversation = conversationCache.find(conversation => conversation.id === activeConversationId);
+      document.querySelector('#conversation-title').textContent = activeConversation && activeConversation.title !== 'New chat' ? activeConversation.title : '';
+      const query = document.querySelector('#history-search').value.trim().toLowerCase();
+      list.replaceChildren();
+      const conversations = conversationCache.filter(conversation =>
+        `${conversation.title || 'New chat'} ${conversation.preview || ''}`.toLowerCase().includes(query));
+      if (!conversations.length) {
+        const empty = document.createElement('div');
+        empty.className = 'history-empty';
+        empty.textContent = query ? 'No matching conversations.' : showArchivedHistory ? 'No archived conversations.' : 'Your conversations will appear here.';
+        list.append(empty);
+        return;
+      }
+      const now = new Date();
+      const today = new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+      const yesterday = today - 86400000;
+      const weekAgo = today - 6*86400000;
+      const groups = new Map([['Today',[]],['Yesterday',[]],['Previous 7 days',[]],['Older',[]]]);
+      for (const conversation of conversations) {
+        let stamp = Number(conversation.updated_at || conversation.created_at || 0);
+        if (stamp > 0 && stamp < 1000000000000) stamp *= 1000;
+        const bucket = stamp >= today ? 'Today' : stamp >= yesterday ? 'Yesterday' : stamp >= weekAgo ? 'Previous 7 days' : 'Older';
+        groups.get(bucket).push(conversation);
+      }
+      for (const [groupName,items] of groups) {
+        if (!items.length) continue;
+        const heading = document.createElement('div'); heading.className='history-group-label'; heading.textContent=groupName; list.append(heading);
+        for (const conversation of items) {
+          const title = conversation.title || 'New chat';
+          const entry = document.createElement('div'); entry.className='history-entry';
+          const row = document.createElement('div'); row.className='history-row';
+          const item = document.createElement('button'); item.type='button'; item.className='history-item'; item.textContent=title; item.title=title; item.setAttribute('aria-label','Open conversation: '+title);
+          item.classList.toggle('selected', conversation.id === activeConversationId);
+          item.addEventListener('click', () => openConversation(conversation.id).catch(error => { voiceStatus.textContent = error.message; }));
+          const options = document.createElement('details'); options.className='history-options';
+          const menuToggle = document.createElement('summary'); menuToggle.textContent='⋯'; menuToggle.setAttribute('aria-label', 'Options for ' + title);
+          const menu = document.createElement('div'); menu.className='history-menu';
+          const renameButton = document.createElement('button'); renameButton.type='button'; renameButton.textContent='Rename';
+          renameButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;openRenameDialog(conversation.id,title);});
+          const archiveButton = document.createElement('button'); archiveButton.type='button'; archiveButton.textContent=showArchivedHistory?'Restore':'Archive';
+          archiveButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;setConversationArchived(conversation.id,title,!showArchivedHistory).catch(error=>{voiceStatus.textContent=error.message;});});
+          const shareButton = document.createElement('button'); shareButton.type='button'; shareButton.textContent='Share';
+          shareButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;shareConversation(conversation.id,title).catch(error=>{voiceStatus.textContent=error.message;});});
+          const deleteButton = document.createElement('button'); deleteButton.type='button'; deleteButton.className='danger'; deleteButton.textContent='Delete chat';
+          deleteButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;deleteSavedConversation(conversation.id,title).catch(error=>{voiceStatus.textContent=error.message;});});
+          menu.append(renameButton,archiveButton,shareButton,deleteButton); options.append(menuToggle,menu); row.append(item,options); entry.append(row);
+          if (conversation.preview) { const preview=document.createElement('div'); preview.className='history-meta'; preview.textContent=conversation.preview; entry.append(preview); }
+          list.append(entry);
+        }
+      }
+    }
     async function refreshConversationList() {
-      const response = await fetch('/api/conversations');
+      const response = await fetch('/api/conversations?archived=' + String(showArchivedHistory));
       if (!response.ok) throw new Error('Could not load chat history.');
       const data = await response.json();
-      const list = document.querySelector('#history-list');
-      const search = document.querySelector('#history-search');
-      const query = search.value.trim().toLowerCase();
-      list.replaceChildren(search);
-      const filteredConversations = data.conversations.filter(conversation => (conversation.title || 'New chat').toLowerCase().includes(query));
-      if (!filteredConversations.length) {
-        const empty = document.createElement('div'); empty.className = 'history-empty'; empty.textContent = query ? 'No matching conversations.' : 'Your conversations will appear here.'; list.append(empty);
-      }
-      for (const conversation of filteredConversations.slice(0, 50)) {
-        const title = conversation.title || 'New chat';
-        const row = document.createElement('div'); row.className='history-row';
-        const item = document.createElement('button'); item.type='button'; item.className='history-item'; item.textContent=title; item.title=title;
-        item.classList.toggle('selected', conversation.id === activeConversationId);
-        item.addEventListener('click', () => openConversation(conversation.id).catch(error => { voiceStatus.textContent = error.message; }));
-        const options = document.createElement('details'); options.className='history-options';
-        const menuToggle = document.createElement('summary'); menuToggle.textContent='⋯'; menuToggle.setAttribute('aria-label', 'Options for ' + title);
-        const menu = document.createElement('div'); menu.className='history-menu';
-        const deleteButton = document.createElement('button'); deleteButton.type='button'; deleteButton.textContent='Delete chat';
-        deleteButton.addEventListener('click', event => { event.stopPropagation(); options.open=false; deleteSavedConversation(conversation.id, title).catch(error => { voiceStatus.textContent=error.message; }); });
-        menu.append(deleteButton); options.append(menuToggle, menu); row.append(item, options); list.append(row);
-      }
-      return data.conversations;
+      conversationCache = Array.isArray(data.conversations) ? data.conversations : [];
+      renderConversationList();
+      return conversationCache;
+    }
+    let renamingConversationId = null;
+    const renameDialog = document.querySelector('#rename-dialog');
+    const renameInput = document.querySelector('#rename-title');
+    function openRenameDialog(id,title) {
+      renamingConversationId=id;
+      renameInput.value=title;
+      renameDialog.showModal();
+      renameInput.focus();
+      renameInput.select();
+    }
+    document.querySelector('#rename-cancel').addEventListener('click',()=>renameDialog.close());
+    document.querySelector('#rename-form').addEventListener('submit',async event=>{
+      event.preventDefault();
+      const title=renameInput.value.trim();
+      if(!renamingConversationId||!title)return;
+      const submit=event.currentTarget.querySelector('[type="submit"]'); submit.disabled=true;
+      try{
+        const response=await fetch('/api/conversations/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:renamingConversationId,title})});
+        const data=await response.json();
+        if(!response.ok)throw new Error(data.error||'Could not rename this conversation.');
+        renameDialog.close();
+        await refreshConversationList();
+      }catch(error){voiceStatus.textContent=error.message;}
+      finally{submit.disabled=false;}
+    });
+    async function setConversationArchived(id,title,archived) {
+      if (document.body.classList.contains('generating')) throw new Error('Wait for the current reply to finish first.');
+      const response=await fetch('/api/conversations/archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:id,archived})});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Could not update this conversation.');
+      voiceStatus.textContent=archived?'Conversation archived.':'Conversation restored.';
+      await refreshConversationList();
+    }
+    async function shareConversation(id,title) {
+      const response=await fetch('/api/history?conversation_id='+encodeURIComponent(id));
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||'Could not load this conversation to share.');
+      const transcript=(data.messages||[]).map(message=>(message.role==='user'?'You':'Amiir AI')+': '+message.content).join('\n\n');
+      const shareData={title:'Amiir AI · '+title,text:title+'\n\n'+transcript};
+      if(navigator.share){try{await navigator.share(shareData);return;}catch(error){if(error.name==='AbortError')return;}}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareData.text);voiceStatus.textContent='Conversation copied. Paste it into the app where you want to share it.';return;}
+      throw new Error('Sharing is not available in this browser.');
     }
     async function deleteSavedConversation(id, title) {
       if (document.querySelector('#send-button').disabled) throw new Error('Wait for the current reply to finish first.');
@@ -981,12 +1179,18 @@
       setView('chat');
       closeSidebar();
       await refreshConversationList();
+      const selected = conversationCache.find(conversation => conversation.id === activeConversationId);
+      document.querySelector('#conversation-title').textContent = selected && selected.title !== 'New chat' ? selected.title : '';
     }
     async function createNewChat() {
       const response = await fetch('/api/conversations', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New chat'})});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not start a new chat.');
       activeConversationId = data.id;
+      document.querySelector('#conversation-title').textContent = '';
+      showArchivedHistory = false;
+      document.querySelector('#recent-history-filter').setAttribute('aria-pressed','true');
+      document.querySelector('#archived-history-filter').setAttribute('aria-pressed','false');
       messages.replaceChildren();
       welcome.hidden = false;
       setView('chat');
@@ -1007,6 +1211,64 @@
         reader.readAsDataURL(file);
       });
     }
+    async function readChatResponseStream(response,onToken) {
+      const reader=response.body.getReader();
+      const decoder=new TextDecoder();
+      const serverSentEvents=response.headers.get('content-type')?.includes('text/event-stream');
+      let buffer='';
+      const consumeLine=line=>{
+        if(!line)return;
+        const payload=serverSentEvents?(line.startsWith('data:')?line.slice(5).trim():''):line;
+        if(!payload||payload==='[DONE]')return;
+        const part=JSON.parse(payload);
+        if(part.error)throw new Error(part.error);
+        const token=typeof part.token==='string'?part.token:typeof part.response==='string'?part.response:'';
+        if(token)onToken(token);
+      };
+      while(true){
+        const {value,done}=await reader.read();
+        buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});
+        const lines=buffer.split('\n'); buffer=lines.pop()||'';
+        for(const line of lines)consumeLine(line.replace(/\r$/,''));
+        if(done)break;
+      }
+      if(buffer.trim())consumeLine(buffer.replace(/\r$/,''));
+    }
+    async function regenerateAssistant(row,body,button) {
+      if(document.body.classList.contains('generating'))return;
+      const userRow=row.previousElementSibling;
+      const userBody=userRow?.querySelector('.message-content');
+      const userPrompt=userBody?.dataset.raw||'';
+      if(!activeConversationId||!userRow||userRow.classList.contains('assistant')||userRow.querySelector('.attachment-chip,.chat-image')||/\[Image attached|^File:/m.test(userPrompt)){
+        voiceStatus.textContent='This reply came from an attachment. Reattach the original file or image to ask again.';
+        return;
+      }
+      const previousAnswer=body.dataset.raw||'';
+      let nextAnswer='';
+      const controller=new AbortController();
+      document.body.classList.add('generating','can-stop');
+      document.querySelector('#send-button').disabled=true;
+      button.disabled=true;
+      document.querySelector('#stop-button').onclick=()=>{voiceStatus.textContent='Stopping the response…';controller.abort();};
+      voiceStatus.textContent='Generating a new answer…';
+      try{
+        const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:activeConversationId,regenerate:true}),signal:controller.signal});
+        if(!response.ok){const data=await response.json();throw new Error(data.error||'Could not regenerate this response.');}
+        await readChatResponseStream(response,token=>{nextAnswer+=token;setMessageText(body,nextAnswer);chatArea.scrollTop=chatArea.scrollHeight;});
+        if(!nextAnswer)throw new Error('The AI returned an empty response.');
+        if(autoSpeak.checked)speakText(nextAnswer,body.speakButton);
+        voiceStatus.textContent='';
+        await refreshConversationList();
+      }catch(error){
+        if(error.name==='AbortError'){setMessageText(body,previousAnswer);voiceStatus.textContent='Response generation stopped.';return;}
+        setMessageText(body,previousAnswer);
+        voiceStatus.textContent=error.message;
+      }finally{
+        document.body.classList.remove('generating','can-stop');
+        document.querySelector('#send-button').disabled=false;
+        button.disabled=false;
+      }
+    }
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const text = input.value.trim();
@@ -1017,9 +1279,11 @@
       if (document.body.classList.contains('generating')) return;
       sendButton.disabled = true;
       document.body.classList.add('generating');
+      const streamingRequest = !selectedChatFile;
+      document.body.classList.toggle('can-stop', streamingRequest);
       const requestController = new AbortController();
       document.querySelector('#stop-button').onclick = () => {
-        voiceStatus.textContent = 'Stopped waiting. The AI service may still finish this request.';
+        voiceStatus.textContent = 'Stopping the response…';
         requestController.abort();
       };
       let reply = null;
@@ -1061,37 +1325,16 @@
           if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
           return;
         }
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        while (true) {
-          const { value, done } = await reader.read();
-          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-          const lines = buffer.split(String.fromCharCode(10));
-          buffer = lines.pop();
-          for (const line of lines) {
-            if (!line) continue;
-            const part = JSON.parse(line);
-            if (part.error) throw new Error(part.error);
-            if (part.token) {
-              answer += part.token;
-              setMessageText(reply, answer);
-              document.querySelector('#chat-area').scrollTop = document.querySelector('#chat-area').scrollHeight;
-            }
-          }
-          if (done) break;
-        }
-        if (buffer.trim()) {
-          const part = JSON.parse(buffer);
-          if (part.error) throw new Error(part.error);
-          if (part.token) answer += part.token;
-          setMessageText(reply, answer);
-        }
+        await readChatResponseStream(response,token=>{
+          answer+=token;
+          setMessageText(reply,answer);
+          chatArea.scrollTop=chatArea.scrollHeight;
+        });
         if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
         await refreshConversationList();
       } catch (error) {
         if (error.name === 'AbortError') {
-          if (reply) setMessageText(reply, answer ? answer + '\n\n_Generation stopped._' : 'Generation stopped.');
+          if (reply) setMessageText(reply, answer ? answer + '\n\nGeneration stopped.' : 'Generation stopped.');
           return;
         }
         const message = location.protocol === 'file:'
@@ -1105,6 +1348,7 @@
         else voiceStatus.textContent = message;
       } finally {
         document.body.classList.remove('generating');
+        document.body.classList.remove('can-stop');
         sendButton.disabled = false;
       }
     });

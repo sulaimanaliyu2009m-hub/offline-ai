@@ -129,7 +129,7 @@ The Python application uses a local SQLite database and Ollama, so it cannot be 
 
 The Wrangler config deploys the interface and a Worker backend. Chat, guest conversation history, and D1 persistence use Cloudflare Workers AI and D1. The Worker name is `amiir-ai`; the Cloudflare Worker project name must match it. Use the repository root, deploy command `npx wrangler deploy`, and leave the output directory empty.
 
-The D1 database `offline-ai-db` is configured in `wrangler.jsonc` with the `DB` binding and migrations directory. Apply new schema migrations from the project folder with `npx wrangler d1 migrations apply offline-ai-db --remote`, or paste the SQL migration into the D1 dashboard's Console if Wrangler authentication is unavailable. The AI binding is declared in `wrangler.jsonc` as `AI`.
+The D1 database `offline-ai-db` is configured in `wrangler.jsonc` with the `DB` binding and migrations directory. Apply every pending schema migration from the project folder with `npx wrangler d1 migrations apply offline-ai-db --remote`, or paste unapplied migration files in numeric order into the D1 dashboard's Console if Wrangler authentication is unavailable. Account routes require migration `0003_accounts.sql`; archived history requires `0004_archive_conversations.sql`. The AI binding is declared in `wrangler.jsonc` as `AI`.
 
 ### Public email accounts
 
@@ -139,7 +139,7 @@ The `workers.dev` URL is public. To use a short branded website address such as 
 
 The Worker currently provides guest chat and D1 conversation history, image questions, image generation, browser-side animation, voice transcription, and summaries for PDF, TXT, Markdown, CSV, and DOCX files. PowerPoint and audio-file summaries are not supported by the public Worker. Uploaded documents are sent to Cloudflare for conversion and summarization; their contents are not saved in chat history. Image generation has per-user and site-wide daily limits. The local Python/Ollama app remains a separate, device-local option. Public Worker chat uses Cloudflare Workers AI and requires an internet connection; the website shell can be cached by the PWA, but model responses are not available offline. Cloudflare services have usage caps, so requests can stop until allowances reset. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing and limits](https://developers.cloudflare.com/d1/platform/pricing/), and [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
-Email signup and password reset are now implemented in the Worker source, but they are not ready for live use until the `0003_accounts.sql` migration is applied and the Resend sender plus Worker secrets are configured. The Worker chat handler returns an NDJSON response after the model finishes; it does not currently stream tokens directly from the model while generation is in progress.
+Email signup and password reset are implemented in the Worker source, but they are not ready for live use until the `0003_accounts.sql` and `0004_archive_conversations.sql` migrations are applied and the Resend sender plus Worker secrets are configured. Text chat uses Cloudflare Workers AI streaming; the client reads the model's SSE response as it arrives, while image-question responses keep their existing NDJSON contract. See [Cloudflare Workers AI streaming bindings](https://developers.cloudflare.com/workers-ai/configuration/bindings/).
 
 ### Publish this source on GitHub
 
