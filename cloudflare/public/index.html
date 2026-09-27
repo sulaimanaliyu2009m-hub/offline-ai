@@ -50,6 +50,13 @@
     .model-tag { color: #777980; font-size: 12px; font-weight: 450; margin-left: 8px; }
     .project-picker-label { color:var(--muted); font-size:12px; font-weight:500; margin-left:auto; }
     #conversation-project { max-width:180px; padding:7px 9px; border:1px solid #dedee8; border-radius:9px; background:var(--surface); color:var(--ink); font:inherit; font-size:12px; }
+    body.shared-view .sidebar,body.shared-view .topbar,body.shared-view .composer-wrap,body.shared-view #create-panel,body.shared-view #settings-panel { display:none !important; }
+    body.shared-view .main { width:min(100%,900px); margin:0 auto; }
+    #shared-heading { padding:24px 28px 4px; color:var(--muted); font-size:13px; }
+    #shared-heading h1 { margin:0 0 6px; color:var(--ink); font-size:22px; }
+    #shared-heading a { color:var(--accent); }
+    .share-link-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:13px; }
+    .share-link-row button { border:1px solid var(--line); border-radius:8px; padding:7px 11px; background:var(--surface); color:var(--ink); cursor:pointer; }
     .chat-area { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior:smooth; }
     #messages { width: min(100%, 850px); margin: 0 auto; padding: 30px 28px 44px; }
     .welcome { min-height: min(58vh, 520px); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 24px; }
@@ -141,6 +148,7 @@
     #attachment-preview button { margin-left:auto; border:0; background:transparent; font-size:20px; cursor:pointer; }
     .composer-note { width:min(100%, 770px); margin:7px auto 0; text-align:center; color:#92949a; font-size:11px; }
     .speak-toggle { width:min(100%, 770px); margin:5px auto 0; display:flex; align-items:center; gap:6px; color:#777980; font-size:12px; }
+    .composer-options .speak-toggle { width:auto; margin:5px 0 0; }
     #chat { width: min(100%, 790px); margin: 0 auto; display: flex; align-items: flex-end; gap: 10px; padding: 10px 11px 10px 16px; border: 1px solid #dedee8; border-radius: 25px; box-shadow:var(--shadow); background: white; transition:border .15s,box-shadow .15s; }
     #chat:focus-within { border-color: #b4aedb; box-shadow:0 10px 34px #4e438f16; }
     #prompt { flex: 1; min-height: 28px; max-height: 160px; resize: none; border: 0; outline: 0; background: transparent; padding: 4px 0; color: #202123; line-height: 1.5; }
@@ -221,6 +229,7 @@
     .settings-card h2 { margin:0 0 6px; font-size:16px; }
     .settings-card p { margin:5px 0 14px; color:var(--muted); font-size:13px; }
     .settings-card select { width:min(100%,360px); padding:10px 12px; border:1px solid #dedee8; border-radius:10px; background:white; color:var(--ink); font:inherit; }
+    .settings-card input:not([type=checkbox]) { display:block; width:min(100%,360px); margin:7px 0 13px; padding:10px 12px; border:1px solid #dedee8; border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; }
     .settings-card textarea { display:block; width:100%; min-height:92px; margin:7px 0 13px; padding:11px 12px; resize:vertical; border:1px solid #dedee8; border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; line-height:1.5; }
     .setting-line { display:flex; align-items:center; gap:9px; margin:13px 0; font-size:14px; }
     .setting-line input { width:17px; height:17px; accent-color:var(--accent); }
@@ -257,7 +266,7 @@
     :root[data-theme="dark"] .nav-button:hover,:root[data-theme="dark"] .history-item:hover,:root[data-theme="dark"] .history-item.selected,:root[data-theme="dark"] .nav-button.history-active,:root[data-theme="dark"] .new-chat-button { background:#30303a; color:#9ad9cf; border-color:#464650; }
     :root[data-theme="dark"] .create-card,:root[data-theme="dark"] .settings-card,:root[data-theme="dark"] #chat { background:#292930; border-color:#3c3c46; color:#e8e8ee; }
     :root[data-theme="dark"] .welcome h1,:root[data-theme="dark"] .create-card h2,:root[data-theme="dark"] .settings-card h2 { color:#f1f1f5; }
-    :root[data-theme="dark"] .create-card textarea,:root[data-theme="dark"] .create-card input[type=file],:root[data-theme="dark"] .create-card select,:root[data-theme="dark"] .settings-card select,:root[data-theme="dark"] #prompt { background:#222228; color:#f1f1f5; border-color:#464650; }
+    :root[data-theme="dark"] .create-card textarea,:root[data-theme="dark"] .create-card input[type=file],:root[data-theme="dark"] .create-card select,:root[data-theme="dark"] .settings-card select,:root[data-theme="dark"] .settings-card input:not([type=checkbox]),:root[data-theme="dark"] #prompt { background:#222228; color:#f1f1f5; border-color:#464650; }
     :root[data-theme="dark"] .tool-tabs,:root[data-theme="dark"] .tool-tab.active,:root[data-theme="dark"] .prompt-chip { background:#30303a !important; color:#e8e8ee !important; border-color:#464650 !important; }
     :root[data-theme="dark"] .message-content.markdown pre { background:#17171d;color:#eee;border-color:#41414b; }
     :root[data-theme="dark"] .token-keyword { color:#c3a1f0; }
@@ -275,7 +284,7 @@
       :root[data-theme="system"] .sidebar,:root[data-theme="system"] .topbar { background:#19191e; border-color:#373741; color:#e8e8ee; }
       :root[data-theme="system"] .composer-wrap { background:linear-gradient(#202027,#202027 30%); }
       :root[data-theme="system"] .create-card,:root[data-theme="system"] .settings-card,:root[data-theme="system"] #chat,:root[data-theme="system"] .generated-image-card { background:#292930; border-color:#3c3c46; color:#e8e8ee; }
-      :root[data-theme="system"] .create-card textarea,:root[data-theme="system"] .create-card input[type=file],:root[data-theme="system"] .create-card select,:root[data-theme="system"] .settings-card select,:root[data-theme="system"] #prompt,:root[data-theme="system"] .message-edit-form textarea { background:#222228; color:#f1f1f5; border-color:#464650; }
+      :root[data-theme="system"] .create-card textarea,:root[data-theme="system"] .create-card input[type=file],:root[data-theme="system"] .create-card select,:root[data-theme="system"] .settings-card select,:root[data-theme="system"] .settings-card input:not([type=checkbox]),:root[data-theme="system"] #prompt,:root[data-theme="system"] .message-edit-form textarea { background:#222228; color:#f1f1f5; border-color:#464650; }
       :root[data-theme="system"] .nav-button,:root[data-theme="system"] .history-item { color:#d0d0d8; }
       :root[data-theme="system"] .nav-button:hover,:root[data-theme="system"] .history-item:hover,:root[data-theme="system"] .history-item.selected,:root[data-theme="system"] .nav-button.history-active,:root[data-theme="system"] .new-chat-button { background:#30303a; color:#9ad9cf; border-color:#464650; }
       :root[data-theme="system"] .tool-tabs,:root[data-theme="system"] .tool-tab.active,:root[data-theme="system"] .prompt-chip,:root[data-theme="system"] .starter-prompt,:root[data-theme="system"] .image-upload-box { background:#30303a !important; color:#e8e8ee !important; border-color:#464650 !important; }
@@ -338,6 +347,7 @@
   </aside>
   <main class="main">
     <header class="topbar"><button id="desktop-sidebar-toggle" class="desktop-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">☰</button><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span><span id="conversation-title" class="conversation-title" aria-live="polite"></span><label class="project-picker-label" for="conversation-project">Project</label><select id="conversation-project" aria-label="Choose project for this conversation"><option value="">No project</option></select><span class="model-tag" aria-label="Current model: Cloudflare Workers AI Llama 3.1 8B">Llama 3.1 8B</span></header>
+    <section id="shared-heading" hidden><h1 id="shared-title"></h1><span>This is a read-only Amiir AI conversation.</span> <a href="/">Open Amiir AI</a></section>
     <section class="chat-area" id="chat-area">
       <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><div id="starter-prompts"><button type="button" class="starter-prompt" data-starter="Explain a difficult idea in simple terms">✦ &nbsp; Explain something</button><button type="button" class="starter-prompt" data-starter="Help me write a clear, polished message about ">✎ &nbsp; Help me write</button><button type="button" class="starter-prompt" data-starter="Help me debug this code: ">⌘ &nbsp; Debug code</button><button type="button" class="starter-prompt" data-starter="Give me a few creative ideas for ">✧ &nbsp; Brainstorm ideas</button><button type="button" class="starter-prompt" data-starter="Summarize this file for my exam." data-starter-action="upload">▤ &nbsp; Analyze a file</button><button type="button" class="starter-prompt" data-starter-action="create-image">▧ &nbsp; Create an image</button></div></div>
       <div id="messages" aria-live="polite"></div>
@@ -423,6 +433,12 @@
       <p>Choose a short title that helps you find this chat later.</p>
       <form id="rename-form"><label for="rename-title">Conversation title</label><input id="rename-title" maxlength="100" required autocomplete="off"><div class="utility-dialog-actions"><button id="rename-cancel" type="button">Cancel</button><button type="submit">Save title</button></div></form>
     </dialog>
+    <dialog class="utility-dialog" id="share-dialog" aria-labelledby="share-heading">
+      <h2 id="share-heading">Shared links</h2>
+      <p id="share-dialog-context">Links expire after 7 days. Anyone with a link can read the conversation until it expires or you revoke it.</p>
+      <div id="share-link-list" aria-live="polite"></div>
+      <div class="utility-dialog-actions"><button type="button" id="share-dialog-close">Close</button></div>
+    </dialog>
     <div class="composer-wrap">
       <p id="voice-status" role="status" aria-live="polite"></p>
       <div id="attachment-preview" hidden><img id="attachment-thumbnail" alt="Selected image" hidden><div class="attachment-copy"><span id="attachment-description"></span><span id="attachment-meta" role="status" aria-live="polite"></span><progress id="attachment-progress" max="100" value="0" hidden aria-label="File upload progress"></progress></div><button type="button" id="remove-attachment" aria-label="Remove attached file">×</button></div>
@@ -477,6 +493,7 @@
     let selectedProjectId = '';
     let temporaryChat = false;
     let temporaryMessages = [];
+    let readOnlyShared = false;
     const temporaryChatToggle = document.querySelector('#temporary-chat');
     temporaryChatToggle.addEventListener('change', async () => {
       if (document.body.classList.contains('generating')) { temporaryChatToggle.checked = temporaryChat; return; }
@@ -1371,7 +1388,7 @@
         const copy = document.createElement('button'); copy.type='button'; copy.textContent='Copy'; copy.setAttribute('aria-label','Copy assistant response');
         copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(body.dataset.raw || ''); copy.textContent='Copied'; setTimeout(()=>copy.textContent='Copy',1200); } catch { voiceStatus.textContent='Could not copy the response in this browser.'; } });
         tools.append(copy, listen);
-        if (!temporaryChat) {
+        if (!temporaryChat && !readOnlyShared) {
           const regenerate=document.createElement('button'); regenerate.type='button'; regenerate.textContent='Regenerate'; regenerate.setAttribute('aria-label','Regenerate assistant response');
           regenerate.addEventListener('click',()=>regenerateAssistant(row,body,regenerate));
           tools.append(regenerate);
@@ -1384,7 +1401,7 @@
         const copy=document.createElement('button'); copy.type='button'; copy.textContent='Copy'; copy.setAttribute('aria-label','Copy your message');
         copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(body.dataset.raw||'');copy.textContent='Copied';setTimeout(()=>copy.textContent='Copy',1200);}catch{voiceStatus.textContent='Could not copy that message in this browser.';}});
         tools.append(copy);
-        if (!temporaryChat) {
+        if (!temporaryChat && !readOnlyShared) {
           const edit=document.createElement('button'); edit.type='button'; edit.className='message-edit-button'; edit.textContent='Edit'; edit.setAttribute('aria-label','Edit your latest message');
           edit.addEventListener('click',()=>openMessageEditor(row,body,tools));
           tools.append(edit);
@@ -1483,9 +1500,11 @@
           archiveButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;setConversationArchived(conversation.id,title,!showArchivedHistory).catch(error=>{voiceStatus.textContent=error.message;});});
           const shareButton = document.createElement('button'); shareButton.type='button'; shareButton.textContent='Share';
           shareButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;shareConversation(conversation.id,title).catch(error=>{voiceStatus.textContent=error.message;});});
+          const manageSharesButton = document.createElement('button'); manageSharesButton.type='button'; manageSharesButton.textContent='Manage shared links';
+          manageSharesButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;openShareLinks(conversation.id,title).catch(error=>{voiceStatus.textContent=error.message;});});
           const deleteButton = document.createElement('button'); deleteButton.type='button'; deleteButton.className='danger'; deleteButton.textContent='Delete chat';
           deleteButton.addEventListener('click',event=>{event.stopPropagation();options.open=false;deleteSavedConversation(conversation.id,title).catch(error=>{voiceStatus.textContent=error.message;});});
-          menu.append(renameButton,archiveButton,shareButton,deleteButton); options.append(menuToggle,menu); row.append(item,options); entry.append(row);
+          menu.append(renameButton,archiveButton,shareButton,manageSharesButton,deleteButton); options.append(menuToggle,menu); row.append(item,options); entry.append(row);
           if (conversation.preview) { const preview=document.createElement('div'); preview.className='history-meta'; preview.textContent=conversation.preview; entry.append(preview); }
           let updatedAt = Number(conversation.updated_at || conversation.created_at || 0);
           if (updatedAt > 0 && updatedAt < 1000000000000) updatedAt *= 1000;
@@ -1586,14 +1605,42 @@
       await refreshConversationListSafely(archived ? 'The conversation was archived' : 'The conversation was restored');
     }
     async function shareConversation(id,title) {
-      const response=await fetch('/api/history?conversation_id='+encodeURIComponent(id));
+      const response=await fetch('/api/shares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:id})});
       const data=await response.json();
-      if(!response.ok)throw new Error(data.error||'Could not load this conversation to share.');
-      const transcript=(data.messages||[]).map(message=>(message.role==='user'?'You':'Amiir AI')+': '+message.content).join('\n\n');
-      const shareData={title:'Amiir AI · '+title,text:title+'\n\n'+transcript};
-      if(navigator.share){try{await navigator.share(shareData);return;}catch(error){if(error.name==='AbortError')return;}}
-      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareData.text);voiceStatus.textContent='Conversation copied. Paste it into the app where you want to share it.';return;}
-      throw new Error('Sharing is not available in this browser.');
+      if(!response.ok)throw new Error(data.error||'Could not create a share link.');
+      const shareUrl=new URL(data.url,location.origin).toString();
+      if(navigator.share){try{await navigator.share({title:'Amiir AI · '+title,url:shareUrl});voiceStatus.textContent='A read-only link was created. It expires in 7 days.';return;}catch(error){if(error.name==='AbortError')return;}}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareUrl);voiceStatus.textContent='Read-only share link copied. It expires in 7 days.';return;}
+      window.prompt('Copy this read-only share link. It expires in 7 days:',shareUrl);
+    }
+    const shareDialog=document.querySelector('#share-dialog');
+    document.querySelector('#share-dialog-close').addEventListener('click',()=>shareDialog.close());
+    async function openShareLinks(conversationId,title) {
+      document.querySelector('#share-dialog-context').textContent=`Links for “${title}” expire after 7 days. Anyone with an active link can read this conversation.`;
+      const list=document.querySelector('#share-link-list'); list.textContent='Loading links…';
+      shareDialog.showModal();
+      const response=await fetch('/api/shares?conversation_id='+encodeURIComponent(conversationId));
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(data.error||'Could not load share links.');
+      list.replaceChildren();
+      if(!data.shares?.length){list.textContent='No share links for this conversation.';return;}
+      for(const share of data.shares){
+        const row=document.createElement('div');row.className='share-link-row';
+        const status=document.createElement('span');
+        const expired=Number(share.expires_at)<=Date.now();
+        status.textContent=share.revoked_at?'Revoked':expired?'Expired':'Active · expires '+new Date(Number(share.expires_at)).toLocaleString();
+        row.append(status);
+        if(!share.revoked_at&&!expired){
+          const revoke=document.createElement('button');revoke.type='button';revoke.textContent='Revoke';
+          revoke.addEventListener('click',async()=>{
+            if(!confirm('Revoke this share link? Anyone using it will lose access.'))return;
+            revoke.disabled=true;
+            try{const result=await fetch('/api/shares/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({share_id:share.id})});const payload=await result.json().catch(()=>({}));if(!result.ok)throw new Error(payload.error||'Could not revoke this link.');await openShareLinks(conversationId,title);}
+            catch(error){revoke.disabled=false;voiceStatus.textContent=error.message;}
+          });row.append(revoke);
+        }
+        list.append(row);
+      }
     }
     async function deleteSavedConversation(id, title) {
       if (document.querySelector('#send-button').disabled) throw new Error('Wait for the current reply to finish first.');
@@ -1648,6 +1695,22 @@
       let conversations = await refreshConversationList();
       if (!conversations.length) { await createNewChat(); return; }
       await openConversation(conversations[0].id);
+    }
+    async function loadSharedConversation(token) {
+      readOnlyShared = true;
+      document.body.classList.add('shared-view');
+      document.querySelector('#shared-heading').hidden = false;
+      welcome.hidden = true;
+      const title = document.querySelector('#shared-title');
+      title.textContent = 'Shared conversation';
+      const response = await fetch('/api/shared?token='+encodeURIComponent(token),{cache:'no-store'});
+      const data = await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(data.error||'This share link is unavailable.');
+      title.textContent = data.title || 'Shared conversation';
+      document.title = `${title.textContent} · Amiir AI`;
+      messages.replaceChildren();
+      for(const message of data.messages||[]) showMessage(message.role,message.content);
+      if(!data.messages?.length){const empty=document.createElement('p');empty.className='history-empty';empty.textContent='This conversation has no messages.';messages.append(empty);}
     }
     function fileAsDataUrl(file) {
       return new Promise((resolve, reject) => {
@@ -1930,11 +1993,20 @@
           : 'Could not start recording: ' + error.message;
       }
     });
-    loadHistory().catch(error => {
-      voiceStatus.textContent = 'Saved chats could not be loaded. You can still start a chat; ' + error.message;
-    });
-    loadPersonalizationSettings().catch(error => { personalizationStatus.textContent = error.message; });
-    loadProjects().catch(error => { projectStatus.textContent = error.message; });
+    const sharedRoute = location.pathname.match(/^\/share\/([A-Za-z0-9_-]{40,50})\/?$/);
+    if (sharedRoute) {
+      loadSharedConversation(sharedRoute[1]).catch(error => {
+        document.querySelector('#shared-title').textContent = 'Shared conversation unavailable';
+        const notice=document.createElement('p');notice.className='history-empty';notice.textContent=error.message;
+        messages.replaceChildren(notice);
+      });
+    } else {
+      loadHistory().catch(error => {
+        voiceStatus.textContent = 'Saved chats could not be loaded. You can still start a chat; ' + error.message;
+      });
+      loadPersonalizationSettings().catch(error => { personalizationStatus.textContent = error.message; });
+      loadProjects().catch(error => { projectStatus.textContent = error.message; });
+    }
   </script>
 </body>
 </html>

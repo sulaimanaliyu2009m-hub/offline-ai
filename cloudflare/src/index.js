@@ -484,6 +484,67 @@ async function routeApi(request, env, owner, trace) {
     return ownerJson({ ok: true, project_id: projectId }, owner);
   }
 
+  if (path === "/api/shares" && method === "POST") {
+    const body = await readJson(request);
+    const conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : "";
+    if (!conversationId || !await ensureConversation(env.DB, owner.id, conversationId)) {
+      return ownerJson({ error: "Conversation not found." }, owner, 404);
+    }
+    const activeLinks = await env.DB.prepare(
+      "SELECT COUNT(*) AS active_count FROM share_links WHERE owner_id = ? AND conversation_id = ? AND revoked_at IS NULL AND expires_at > ?",
+    ).bind(owner.id, conversationId, Date.now()).first();
+    if (Number(activeLinks?.active_count || 0) >= 20) {
+      return ownerJson({ error: "This conversation already has 20 active share links. Revoke one before creating another." }, owner, 429);
+    }
+    const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+    const token = btoa(String.fromCharCode(...tokenBytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    const expiresAt = createdAt + 7 * 24 * 60 * 60 * 1000;
+    await env.DB.prepare(
+      "INSERT INTO share_links (id, token_hash, owner_id, conversation_id, created_at, expires_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, NULL)",
+    ).bind(id, await sha256Hex(token), owner.id, conversationId, createdAt, expiresAt).run();
+    return ownerJson({ ok: true, url: `/share/${token}`, expiresAt }, owner, 201);
+  }
+
+  if (path === "/api/shares" && method === "GET") {
+    const conversationId = url.searchParams.get("conversation_id") || "";
+    if (!conversationId || !await ensureConversation(env.DB, owner.id, conversationId)) return ownerJson({ error: "Conversation not found." }, owner, 404);
+    const result = await env.DB.prepare(
+      "SELECT id, created_at, expires_at, revoked_at FROM share_links WHERE owner_id = ? AND conversation_id = ? ORDER BY created_at DESC LIMIT 50",
+    ).bind(owner.id, conversationId).all();
+    return ownerJson({ shares: result.results || [] }, owner);
+  }
+
+  if (path === "/api/shares/revoke" && method === "POST") {
+    const body = await readJson(request);
+    const shareId = typeof body?.share_id === "string" ? body.share_id : "";
+    if (!shareId) return ownerJson({ error: "Choose a share link to revoke." }, owner, 400);
+    const result = await env.DB.prepare(
+      "UPDATE share_links SET revoked_at = ? WHERE id = ? AND owner_id = ? AND revoked_at IS NULL",
+    ).bind(Date.now(), shareId, owner.id).run();
+    if (!result.meta?.changes) return ownerJson({ error: "Share link not found or already revoked." }, owner, 404);
+    return ownerJson({ ok: true }, owner);
+  }
+
+  if (path === "/api/shared" && method === "GET") {
+    const token = url.searchParams.get("token") || "";
+    if (!/^[A-Za-z0-9_-]{40,50}$/.test(token)) return json({ error: "This share link is invalid or expired." }, 404);
+    const tokenHash = await sha256Hex(token);
+    const link = await env.DB.prepare(
+      "SELECT conversation_id, owner_id FROM share_links WHERE token_hash = ? AND expires_at > ? AND revoked_at IS NULL",
+    ).bind(tokenHash, Date.now()).first();
+    if (!link) return json({ error: "This share link is invalid, expired, or revoked." }, 404);
+    const conversation = await env.DB.prepare(
+      "SELECT title, created_at FROM conversations WHERE id = ? AND owner_id = ?",
+    ).bind(link.conversation_id, link.owner_id).first();
+    if (!conversation) return json({ error: "This shared conversation is no longer available." }, 404);
+    const result = await env.DB.prepare(
+      "SELECT role, content, created_at FROM messages WHERE conversation_id = ? AND owner_id = ? ORDER BY created_at, rowid LIMIT 500",
+    ).bind(link.conversation_id, link.owner_id).all();
+    return json({ title: conversation.title, created_at: conversation.created_at, messages: result.results || [] });
+  }
+
   if (path === "/api/conversations" && method === "GET") {
     const archived = url.searchParams.get("archived") === "true";
     const search = (url.searchParams.get("q") || "").trim().slice(0, 120);

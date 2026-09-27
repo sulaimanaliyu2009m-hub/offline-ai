@@ -342,6 +342,54 @@ test("temporary chat streams with browser context and writes no conversation or 
   assert.equal(writes.length, 0);
 });
 
+test("share links expose only random bearer tokens, expire, and load read-only owner data", async () => {
+  const ownerId = "11111111-2222-4333-8444-555555555555";
+  let persisted;
+  let revoked = false;
+  const db = {
+    prepare(sql) {
+      return {
+        sql, args: [], bind(...args) { this.args = args; return this; },
+        async first() {
+          if (this.sql.includes("FROM conversations")) return { id: "chat-private", title: "Study notes", project_id: null };
+          if (this.sql.includes("COUNT(*) AS active_count")) return { active_count: 0 };
+          if (this.sql.includes("FROM share_links")) return revoked ? null : { conversation_id: "chat-private", owner_id: ownerId };
+          return null;
+        },
+        async all() { return { results: [{ role: "assistant", content: "Shared answer", created_at: 20 }] }; },
+        async run() { persisted = { sql: this.sql, args: this.args }; if(this.sql.includes("UPDATE share_links"))revoked=true; return { success: true, meta:{changes:1} }; },
+      };
+    },
+  };
+  const create = await worker.fetch(new Request("https://example.test/api/shares", {
+    method: "POST", headers: { "content-type": "application/json", cookie: `offline_ai_guest=${ownerId}` },
+    body: JSON.stringify({ conversation_id: "chat-private" }),
+  }), { DB: db });
+  const created = await create.json();
+  assert.equal(create.status, 201);
+  assert.match(created.url, /^\/share\/[A-Za-z0-9_-]{40,50}$/);
+  assert.equal(created.expiresAt - persisted.args[4], 7 * 24 * 60 * 60 * 1000);
+  assert.equal(persisted.args[1].length, 64);
+  assert.equal(persisted.args.includes(created.url.split("/").at(-1)), false);
+
+  const token = created.url.split("/").at(-1);
+  const shared = await worker.fetch(new Request(`https://example.test/api/shared?token=${token}`), { DB: db });
+  const body = await shared.json();
+  assert.equal(shared.status, 200);
+  assert.equal(body.title, "Study notes");
+  assert.deepEqual(body.messages, [{ role: "assistant", content: "Shared answer", created_at: 20 }]);
+
+  const shareId = persisted.args[0];
+  const revoke = await worker.fetch(new Request("https://example.test/api/shares/revoke", {
+    method:"POST",headers:{"content-type":"application/json",cookie:`offline_ai_guest=${ownerId}`},
+    body:JSON.stringify({share_id:shareId}),
+  }),{DB:db});
+  assert.equal(revoke.status,200);
+  assert.equal(persisted.args[2],ownerId);
+  const revokedLink = await worker.fetch(new Request(`https://example.test/api/shared?token=${token}`),{DB:db});
+  assert.equal(revokedLink.status,404);
+});
+
 test("a Workers AI provider failure returns a traceable error instead of hiding the cause", async () => {
   const db = {
     prepare() {
