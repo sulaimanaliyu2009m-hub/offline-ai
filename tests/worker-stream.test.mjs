@@ -48,6 +48,35 @@ test("chat forwards Workers AI SSE and persists the completed answer", async () 
     statement.sql.includes("'assistant'") && statement.args.includes("Hello from Amiir.")));
 });
 
+test("chat AI endpoint enforces its per-IP rate limit and returns Retry-After", async () => {
+  const db = {
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async first() {
+          if (sql.includes("INSERT INTO ai_rate_limits")) return { request_count: 46 };
+          return null;
+        },
+      };
+    },
+  };
+  let aiCalled = false;
+  const response = await worker.fetch(new Request("https://example.test/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.10" },
+    body: JSON.stringify({ message: "hello" }),
+  }), {
+    DB: db,
+    AI: { async run() { aiCalled = true; throw new Error("AI should not run when rate-limited"); } },
+  });
+  const body = await response.json();
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.ok(Number(response.headers.get("retry-after")) > 0);
+  assert.equal(body.code, "RATE_LIMITED");
+  assert.equal(aiCalled, false);
+});
+
 test("editing the latest user turn is owner-scoped and replaces its saved pair after streaming", async () => {
   const ownerId = "11111111-2222-4333-8444-555555555555";
   const conversationId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

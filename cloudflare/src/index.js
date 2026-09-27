@@ -129,6 +129,31 @@ function constantTimeEqual(left, right) {
   return difference === 0;
 }
 
+async function aiRateLimit(request, env, operation, maximum, windowSeconds = 60) {
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = Math.floor(now / windowSeconds) * windowSeconds;
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const ipHash = await sha256Hex(ip);
+  const result = await env.DB.prepare(
+    `INSERT INTO ai_rate_limits (ip_hash, operation, window_start, request_count)
+     VALUES (?, ?, ?, 1)
+     ON CONFLICT(ip_hash, operation) DO UPDATE SET
+       request_count = CASE WHEN ai_rate_limits.window_start = excluded.window_start
+         THEN ai_rate_limits.request_count + 1 ELSE 1 END,
+       window_start = excluded.window_start
+     RETURNING request_count`,
+  ).bind(ipHash, operation, windowStart).first();
+  return { allowed: Number(result?.request_count || 0) <= maximum, retryAfter: Math.max(1, windowStart + windowSeconds - now) };
+}
+
+function rateLimitedResponse(owner, retryAfter) {
+  const response = ownerJson({ ok: false, code: "RATE_LIMITED", error: "That AI tool is getting many requests. Wait briefly, then try again." }, owner, 429);
+  const headers = new Headers(response.headers);
+  headers.set("Retry-After", String(retryAfter));
+  headers.set("Cache-Control", "no-store");
+  return new Response(response.body, { status: 429, headers });
+}
+
 async function sendVerificationEmail(env, contact, code, purpose = "verify your Amiir AI account") {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
     throw new Error("Email signup needs RESEND_API_KEY and EMAIL_FROM configured in Cloudflare Worker secrets and variables.");
@@ -698,6 +723,8 @@ async function routeApi(request, env, owner, trace) {
 
   if (path === "/api/transcribe" && method === "POST") {
     if (!env.AI) return ownerJson({ error: "Voice transcription is not connected." }, owner, 503);
+    const rate = await aiRateLimit(request, env, "transcribe", 12);
+    if (!rate.allowed) return rateLimitedResponse(owner, rate.retryAfter);
     const declaredSize = Number(request.headers.get("content-length") || 0);
     if (declaredSize > 8 * 1024 * 1024) return ownerJson({ error: "That recording is too large. Record a shorter voice message." }, owner, 413);
     const audio = await request.arrayBuffer();
@@ -738,6 +765,8 @@ async function routeApi(request, env, owner, trace) {
         return ownerJson({ error: "That image could not be read. Choose it again and retry." }, owner, 400);
       }
     }
+    const rate = await aiRateLimit(request, env, "chat", 45);
+    if (!rate.allowed) return rateLimitedResponse(owner, rate.retryAfter);
 
     const temporaryChat = body.temporary === true;
     if (temporaryChat && (body.conversation_id || imageBytes || regenerate || replaceLast)) {
@@ -889,6 +918,8 @@ async function routeApi(request, env, owner, trace) {
     if (!prompt) return ownerJson({ error: "Write an image description first." }, owner, 400);
     if (prompt.length > 2048) return ownerJson({ error: "Keep the image description under 2,048 characters." }, owner, 413);
     if (!env.DB) return ownerJson({ error: "The chat database is not connected yet." }, owner, 503);
+    const rate = await aiRateLimit(request, env, "image", 5);
+    if (!rate.allowed) return rateLimitedResponse(owner, rate.retryAfter);
 
     const day = new Date().toISOString().slice(0, 10);
     const reserve = async (key, cap) => env.DB.prepare(
@@ -932,6 +963,8 @@ async function routeApi(request, env, owner, trace) {
     if (!supportedExtensions.has(extension)) {
       return ownerJson({ error: "This file type is not supported. Upload a PDF, TXT, Markdown, CSV, or DOCX file." }, owner, 415);
     }
+    const rate = await aiRateLimit(request, env, "file_summary", 12);
+    if (!rate.allowed) return rateLimitedResponse(owner, rate.retryAfter);
     const declaredSize = Number(request.headers.get("content-length") || 0);
     if (declaredSize > 20 * 1024 * 1024) return ownerJson({ error: "Choose a file smaller than 20 MB." }, owner, 413);
     const fileBytes = await request.arrayBuffer();
