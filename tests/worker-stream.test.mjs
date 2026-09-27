@@ -103,3 +103,103 @@ test("editing the latest user turn is owner-scoped and replaces its saved pair a
   assert.ok(writes.some(write => write.sql.includes("UPDATE messages SET content") && write.args.includes("Updated question") && write.args.includes(ownerId)));
   assert.ok(writes.some(write => write.sql.includes("DELETE FROM messages") && write.args.includes("old-answer") && write.args.includes(ownerId)));
 });
+
+test("a missing D1 migration returns a safe diagnostic and request ID", async () => {
+  const db = {
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async all() { throw new Error("no such column: archived_at"); },
+      };
+    },
+  };
+  const request = new Request("https://example.test/api/conversations");
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const response = await worker.fetch(request, { DB: db });
+    const body = await response.json();
+    assert.equal(response.status, 500);
+    assert.equal(body.code, "DATABASE_SCHEMA_MIGRATION_REQUIRED");
+    assert.match(body.error, /pending D1 migrations/);
+    assert.ok(body.requestId);
+    assert.equal(response.headers.get("x-request-id"), body.requestId);
+    assert.doesNotMatch(JSON.stringify(body), /no such column|archived_at/);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("a Workers AI provider failure returns a traceable error instead of hiding the cause", async () => {
+  const db = {
+    prepare() {
+      return {
+        bind() { return this; },
+        async first() { return null; },
+        async all() { return { results: [] }; },
+        async run() { return { success: true }; },
+      };
+    },
+    async batch() { return []; },
+  };
+  const request = new Request("https://example.test/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ message: "A diagnostic test" }),
+  });
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const response = await worker.fetch(request, { DB: db, AI: { async run() { throw new Error("private provider details"); } } });
+    const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.equal(body.code, "AI_PROVIDER_ERROR");
+    assert.ok(body.requestId);
+    assert.equal(response.headers.get("x-request-id"), body.requestId);
+    assert.doesNotMatch(JSON.stringify(body), /private provider details/);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("the document endpoint accepts the Worker's raw file body and summarizes its contents", async () => {
+  const writes = [];
+  const db = {
+    prepare(sql) {
+      return {
+        sql,
+        bind(...args) { this.args = args; return this; },
+        async first() { return null; },
+        async all() { return { results: [] }; },
+        async run() { return { success: true }; },
+      };
+    },
+    async batch(statements) { writes.push(...statements); return []; },
+  };
+  let prompt;
+  const request = new Request("https://example.test/api/summarize-file?question=Summarize", {
+    method: "POST",
+    headers: { "content-type": "text/plain", "x-attachment-name": "notes.txt" },
+    body: "Amiir upload test: plants use sunlight to make food.",
+  });
+  const response = await worker.fetch(request, {
+    DB: db,
+    AI: { async run(_model, options) { prompt = options.messages.at(-1).content; return { response: "Plants use sunlight to make food." }; } },
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.answer, "Plants use sunlight to make food.");
+  assert.match(prompt, /Amiir upload test/);
+  assert.ok(writes.some(write => write.sql.includes("INSERT INTO messages") && write.args.includes("Plants use sunlight to make food.")));
+});
+
+test("the document endpoint returns a specific unsupported-type error", async () => {
+  const response = await worker.fetch(new Request("https://example.test/api/summarize-file", {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream", "x-attachment-name": "audio.mp3" },
+    body: "not sent to the model",
+  }), { DB: {}, AI: {} });
+  const body = await response.json();
+  assert.equal(response.status, 415);
+  assert.match(body.error, /not supported/);
+});

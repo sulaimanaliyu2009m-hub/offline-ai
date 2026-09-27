@@ -61,6 +61,23 @@ function ownerJson(data, owner, status = 200, extraCookies = []) {
   return response;
 }
 
+function apiFailure(request, owner, trace, status, code, message) {
+  const route = new URL(request.url).pathname;
+  console.error(JSON.stringify({
+    event: "api_request_failed",
+    requestId: trace.requestId,
+    route,
+    method: request.method,
+    status,
+    code,
+    durationMs: Date.now() - trace.startedAt,
+  }));
+  const response = ownerJson({ ok: false, error: message, code, requestId: trace.requestId }, owner, status);
+  const headers = new Headers(response.headers);
+  headers.set("X-Request-ID", trace.requestId);
+  return new Response(response.body, { status: response.status, headers });
+}
+
 function accountCookie(token, maxAge = ACCOUNT_SESSION_SECONDS) {
   return `${ACCOUNT_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
@@ -296,7 +313,7 @@ function responseTextFromSseLine(line) {
   }
 }
 
-async function routeApi(request, env, owner) {
+async function routeApi(request, env, owner, trace) {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -316,7 +333,7 @@ async function routeApi(request, env, owner) {
   }
 
   if (!env.DB) {
-    return ownerJson({ error: "The chat database is not connected yet. Add the D1 binding named DB in Cloudflare settings." }, owner, 503);
+    return apiFailure(request, owner, trace, 503, "DATABASE_NOT_CONFIGURED", "The chat database is not connected. The site owner needs to check the D1 binding.");
   }
 
   if (path === "/api/conversations" && method === "GET") {
@@ -399,8 +416,7 @@ async function routeApi(request, env, owner) {
       if (!text) return ownerJson({ error: "I couldn't hear clear words in that recording. Please try again." }, owner, 422);
       return ownerJson({ text, language: result?.transcription_info?.language || "" }, owner);
     } catch (error) {
-      console.error("Workers AI voice transcription failed", error);
-      return ownerJson({ error: "Voice transcription failed. Please try a shorter recording." }, owner, 502);
+      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "Voice transcription failed. Please try a shorter recording.");
     }
   }
 
@@ -470,8 +486,7 @@ async function routeApi(request, env, owner) {
         });
         answer = generated?.description || generated?.response || generated?.result?.response || "I couldn't analyze this image. Please try another one.";
       } catch (error) {
-        console.error("Workers AI image question failed", error);
-        return ownerJson({ error: "The AI request failed. Check the Workers AI binding and try again." }, owner, 502);
+        return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The image question could not be processed. Please try again.");
       }
       const savedAt = Date.now();
       await env.DB.batch([
@@ -503,11 +518,10 @@ async function routeApi(request, env, owner) {
         stream: true,
       });
     } catch (error) {
-      console.error("Workers AI request failed", error);
-      return ownerJson({ error: "The AI request failed. Check the Workers AI binding and try again." }, owner, 502);
+      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The AI request could not be completed. Please try again.");
     }
     if (!modelStream || typeof modelStream.pipeThrough !== "function") {
-      return ownerJson({ error: "The AI service did not start a response stream. Please try again." }, owner, 502);
+      return apiFailure(request, owner, trace, 502, "AI_STREAM_UNAVAILABLE", "The AI service did not start a response stream. Please try again.");
     }
 
     const decoder = new TextDecoder();
@@ -575,7 +589,7 @@ async function routeApi(request, env, owner) {
       }
       return ownerJson({ url: `data:image/jpeg;charset=utf-8;base64,${generated.image}` }, owner);
     } catch (error) {
-      console.error("Workers AI image generation failed", error);
+      console.error(JSON.stringify({ event: "api_request_failed", requestId: trace.requestId, route: path, method, status: 502, code: "IMAGE_PROVIDER_ERROR", durationMs: Date.now() - trace.startedAt }));
       await env.DB.batch([
         env.DB.prepare("UPDATE image_usage SET count = count - 1 WHERE day = ? AND owner_id = ? AND count > 0").bind(day, owner.id),
         env.DB.prepare("UPDATE image_usage SET count = count - 1 WHERE day = ? AND owner_id = '__global__' AND count > 0").bind(day),
@@ -592,7 +606,7 @@ async function routeApi(request, env, owner) {
     const question = (url.searchParams.get("question") || "").trim().slice(0, 1200);
     const supportedExtensions = new Set(["pdf", "txt", "md", "csv", "docx"]);
     if (!supportedExtensions.has(extension)) {
-      return ownerJson({ error: "This Cloudflare version can summarize PDF, TXT, Markdown, CSV, and DOCX files. PowerPoint and audio support will be added next." }, owner, 415);
+      return ownerJson({ error: "This file type is not supported. Upload a PDF, TXT, Markdown, CSV, or DOCX file." }, owner, 415);
     }
     const declaredSize = Number(request.headers.get("content-length") || 0);
     if (declaredSize > 20 * 1024 * 1024) return ownerJson({ error: "Choose a file smaller than 20 MB." }, owner, 413);
@@ -619,8 +633,7 @@ async function routeApi(request, env, owner) {
         sourceText = document.data;
       }
     } catch (error) {
-      console.error("Uploaded document conversion failed", error);
-      return ownerJson({ error: "I couldn't read that file. Check that it is a supported, readable PDF or DOCX, or try a text, Markdown, or CSV file." }, owner, 422);
+      return apiFailure(request, owner, trace, 422, "FILE_PARSE_ERROR", "I couldn't read that file. Check that it is a supported, readable PDF or DOCX, or try a text, Markdown, or CSV file.");
     }
     sourceText = sourceText.trim().slice(0, 14000);
     if (!sourceText) return ownerJson({ error: "I couldn't find readable text in that file." }, owner, 422);
@@ -648,8 +661,7 @@ async function routeApi(request, env, owner) {
         ? generated
         : generated?.response || generated?.result?.response || "I couldn't create a summary. Please try again.";
     } catch (error) {
-      console.error("Workers AI document summary failed", error);
-      return ownerJson({ error: "The AI summary failed. Please try again later." }, owner, 502);
+      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The AI summary failed. Please try again later.");
     }
     const savedAt = Date.now();
     const storedRequest = `File: ${fileName}\nRequest: ${requestText}`;
@@ -675,13 +687,20 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
+    const trace = { requestId: crypto.randomUUID(), startedAt: Date.now() };
     let owner;
     try {
       owner = await ownerFor(request, env);
-      return await routeApi(request, env, owner);
+      return await routeApi(request, env, owner, trace);
     } catch (error) {
       owner ||= { id: crypto.randomUUID(), cookie: null };
-      return ownerJson({ error: "The request could not be completed. Check that the D1 tables have been created." }, owner, 500);
+      const message = String(error?.message || "").toLowerCase();
+      const schemaFailure = /no such (column|table)|has no column named|no column named/.test(message);
+      const code = schemaFailure ? "DATABASE_SCHEMA_MIGRATION_REQUIRED" : "INTERNAL_ERROR";
+      const friendly = schemaFailure
+        ? "A database update is required. The site owner must apply the pending D1 migrations."
+        : "The request could not be completed. Please try again.";
+      return apiFailure(request, owner, trace, 500, code, friendly);
     }
   },
 };

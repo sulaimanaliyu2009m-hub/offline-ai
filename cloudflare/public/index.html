@@ -408,7 +408,7 @@
     <div class="composer-wrap">
       <p id="voice-status" role="status" aria-live="polite"></p>
       <div id="attachment-preview" hidden><img id="attachment-thumbnail" alt="Selected image" hidden><div class="attachment-copy"><span id="attachment-description"></span><span id="attachment-meta" role="status" aria-live="polite"></span><progress id="attachment-progress" max="100" value="0" hidden aria-label="File upload progress"></progress></div><button type="button" id="remove-attachment" aria-label="Remove attached file">×</button></div>
-      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx,.pptx,.mp3,.m4a,.wav,.webm,.ogg,.opus,.flac,.aac" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Amiir AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="button" id="stop-button" aria-label="Stop waiting for response" title="Stop waiting for response">■</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
+      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Amiir AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="button" id="stop-button" aria-label="Stop waiting for response" title="Stop waiting for response">■</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
       <label class="speak-toggle"><input type="checkbox" id="auto-speak"> Speak replies aloud</label>
     </div>
   </main>
@@ -502,11 +502,10 @@
       if (!file) return;
       const extension = file.name.split('.').pop().toLowerCase();
       const imageFile = ['image/png', 'image/jpeg', 'image/webp'].includes(file.type);
-      const audioFile = ['mp3', 'm4a', 'wav', 'webm', 'ogg', 'opus', 'flac', 'aac'].includes(extension);
-      const documentFile = ['pdf', 'txt', 'md', 'csv', 'docx', 'pptx'].includes(extension);
-      if (!imageFile && !audioFile && !documentFile) {
+      const documentFile = ['pdf', 'txt', 'md', 'csv', 'docx'].includes(extension);
+      if (!imageFile && !documentFile) {
         clearChatImage();
-        voiceStatus.textContent = 'Choose an image, PDF, text, Word, PowerPoint, or supported audio file.';
+        voiceStatus.textContent = 'Choose a PNG, JPEG, or WebP image, or a PDF, TXT, Markdown, CSV, or DOCX file.';
         return;
       }
       if (file.size > (imageFile ? 4 : 20) * 1024 * 1024) {
@@ -1227,7 +1226,7 @@
         await readChatResponseStream(response,token=>{answer+=token;setMessageText(assistantBody,answer);chatArea.scrollTop=chatArea.scrollHeight;});
         if(!answer)throw new Error('The AI returned an empty response.');
         if(autoSpeak.checked)speakText(answer,assistantBody.speakButton);
-        voiceStatus.textContent='';await refreshConversationList();
+        voiceStatus.textContent='';await refreshConversationListSafely('The edited reply was received');
       } catch(error) {
         setMessageText(userBody,oldUser);setMessageText(assistantBody,oldAnswer);
         voiceStatus.textContent=error.name==='AbortError'?'Message update stopped. Your previous response was restored.':error.message;
@@ -1293,11 +1292,24 @@
     }
     async function refreshConversationList() {
       const response = await fetch('/api/conversations?archived=' + String(showArchivedHistory));
-      if (!response.ok) throw new Error('Could not load chat history.');
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = typeof data.error === 'string' ? data.error : data.error?.message;
+        const requestId = data.requestId || response.headers.get('x-request-id');
+        throw new Error(`${detail || `Could not load chat history (HTTP ${response.status}).`}${requestId ? ` Reference: ${requestId}.` : ''}`);
+      }
       conversationCache = Array.isArray(data.conversations) ? data.conversations : [];
       renderConversationList();
       return conversationCache;
+    }
+    async function refreshConversationListSafely(context) {
+      try {
+        await refreshConversationList();
+        return true;
+      } catch (error) {
+        voiceStatus.textContent = `${context}, but saved chat history could not refresh. ${error.message}`;
+        return false;
+      }
     }
     let renamingConversationId = null;
     const renameDialog = document.querySelector('#rename-dialog');
@@ -1320,7 +1332,7 @@
         const data=await response.json();
         if(!response.ok)throw new Error(data.error||'Could not rename this conversation.');
         renameDialog.close();
-        await refreshConversationList();
+        await refreshConversationListSafely('The conversation was renamed');
       }catch(error){voiceStatus.textContent=error.message;}
       finally{submit.disabled=false;}
     });
@@ -1330,7 +1342,7 @@
       const data=await response.json();
       if(!response.ok)throw new Error(data.error||'Could not update this conversation.');
       voiceStatus.textContent=archived?'Conversation archived.':'Conversation restored.';
-      await refreshConversationList();
+      await refreshConversationListSafely(archived ? 'The conversation was archived' : 'The conversation was restored');
     }
     async function shareConversation(id,title) {
       const response=await fetch('/api/history?conversation_id='+encodeURIComponent(id));
@@ -1349,7 +1361,7 @@
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not delete this chat.');
       if (activeConversationId === id) await createNewChat();
-      else await refreshConversationList();
+      else await refreshConversationListSafely('The conversation was deleted');
     }
     async function openConversation(id) {
       const response = await fetch('/api/history?conversation_id=' + encodeURIComponent(id));
@@ -1361,7 +1373,7 @@
       welcome.hidden = data.messages.length > 0;
       setView('chat');
       closeSidebar();
-      await refreshConversationList();
+      await refreshConversationListSafely('The conversation was opened');
       const selected = conversationCache.find(conversation => conversation.id === activeConversationId);
       document.querySelector('#conversation-title').textContent = selected && selected.title !== 'New chat' ? selected.title : '';
     }
@@ -1378,7 +1390,7 @@
       welcome.hidden = false;
       setView('chat');
       input.value=''; input.style.height='auto'; clearChatImage();
-      await refreshConversationList();
+      await refreshConversationListSafely('The new chat was created');
       closeSidebar();
     }
     async function loadHistory() {
@@ -1441,7 +1453,7 @@
         if(!nextAnswer)throw new Error('The AI returned an empty response.');
         if(autoSpeak.checked)speakText(nextAnswer,body.speakButton);
         voiceStatus.textContent='';
-        await refreshConversationList();
+        await refreshConversationListSafely('The regenerated reply was received');
       }catch(error){
         if(error.name==='AbortError'){setMessageText(body,previousAnswer);voiceStatus.textContent='Response generation stopped.';return;}
         setMessageText(body,previousAnswer);
@@ -1483,7 +1495,7 @@
       event.preventDefault();
       const text = input.value.trim();
       const attachmentFile = selectedChatFile;
-      const imageFile = attachmentFile && ['image/png', 'image/jpeg', 'image/webp'].includes(attachmentFile.type);
+      const isImage = attachmentFile && ['image/png', 'image/jpeg', 'image/webp'].includes(attachmentFile.type);
       if (!text && !attachmentFile) return;
       const sendButton = document.querySelector('#send-button');
       if (document.body.classList.contains('generating')) return;
@@ -1499,16 +1511,16 @@
       let answer = '';
       try {
         voiceStatus.textContent = attachmentFile ? 'Preparing your attachment…' : 'Amiir AI is generating a reply…';
-        const imageData = imageFile ? await fileAsDataUrl(imageFile) : null;
-        const shownText = text || (imageFile ? 'What is in this image?' : 'Summarize this for my exam.');
-        showMessage('user', shownText, imageData, attachmentFile && !imageFile ? attachmentFile.name : null);
+        const imageData = isImage ? await fileAsDataUrl(attachmentFile) : null;
+        const shownText = text || (isImage ? 'What is in this image?' : 'Summarize this for my exam.');
+        showMessage('user', shownText, imageData, attachmentFile && !isImage ? attachmentFile.name : null);
         reply = showMessage('assistant', '');
         input.value = '';
         input.style.height = 'auto';
         input.focus();
         let response;
         if (attachmentFile) {
-          if (imageFile) {
+          if (isImage) {
             // Keep fetch here because chat responses stream as NDJSON; XMLHttpRequest
             // does not expose the ReadableStream consumed by readChatResponseStream.
             attachmentProgress.hidden = true;
@@ -1540,12 +1552,12 @@
           const data = await response.json();
           throw new Error(data.error || 'The chat request failed.');
         }
-        if (attachmentFile && !imageFile) {
+        if (attachmentFile && !isImage) {
           const data = await response.json();
           answer = data.answer || '';
           setMessageText(reply, answer);
           clearChatImage();
-          await refreshConversationList();
+          await refreshConversationListSafely('The file summary was received');
           if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
           return;
         }
@@ -1557,9 +1569,9 @@
         if (attachmentFile) clearChatImage();
         if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
         voiceStatus.textContent = '';
-        await refreshConversationList();
+        await refreshConversationListSafely('The reply was received');
       } catch (error) {
-        if (attachmentFile) attachmentMeta.textContent = error.name === 'AbortError' ? 'Upload stopped. You can retry or remove it.' : 'Upload or processing failed. You can retry or remove it.';
+        if (attachmentFile) attachmentMeta.textContent = error.name === 'AbortError' ? 'Upload stopped. You can retry or remove it.' : (error.message || 'Upload or processing failed. You can retry or remove it.');
         if (text) { input.value=text; input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,160)+'px'; }
         if (error.name === 'AbortError') {
           if (reply) setMessageText(reply, answer ? answer + '\n\nGeneration stopped.' : 'Generation stopped.');
@@ -1662,7 +1674,9 @@
           : 'Could not start recording: ' + error.message;
       }
     });
-    loadHistory().catch(error => showMessage('assistant', 'Could not load saved chat: ' + error.message));
+    loadHistory().catch(error => {
+      voiceStatus.textContent = 'Saved chats could not be loaded. You can still start a chat; ' + error.message;
+    });
   </script>
 </body>
 </html>
