@@ -1,6 +1,8 @@
 const COOKIE = "offline_ai_guest";
 const ACCOUNT_COOKIE = "amiir_ai_session";
+const ADMIN_COOKIE = "amiir_ai_admin";
 const ACCOUNT_SESSION_SECONDS = 60 * 60 * 24 * 30;
+const ADMIN_SESSION_SECONDS = 60 * 60;
 const PASSWORD_ITERATIONS = 310000;
 const MAX_PROMPT_CHARS = 12000;
 const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
@@ -366,10 +368,75 @@ function responseTextFromSseLine(line) {
   }
 }
 
+function adminCookie(token, maxAge = ADMIN_SESSION_SECONDS) {
+  return `${ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/api/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+}
+
+async function adminRoute(request, env, path) {
+  if (!env.DB) return json({ error: "The admin database is unavailable." }, 503);
+  if (typeof env.ADMIN_PASSWORD !== "string" || env.ADMIN_PASSWORD.length < 16) {
+    return json({ error: "Admin access is not configured. Set the ADMIN_PASSWORD Worker secret to a private value of at least 16 characters." }, 503);
+  }
+  if (path === "/api/admin/login" && request.method === "POST") {
+    if (!await checkAuthLimit(request, env)) return json({ error: "Too many admin sign-in attempts. Wait 15 minutes and try again." }, 429);
+    const rawBody = await request.text();
+    if (rawBody.length > 2000) return json({ error: "Admin sign-in request is too large." }, 413);
+    let body;
+    try { body = JSON.parse(rawBody); } catch { body = null; }
+    const passwordMatches = body && typeof body.password === "string" &&
+      constantTimeEqual(await sha256Hex(body.password), await sha256Hex(env.ADMIN_PASSWORD));
+    if (!passwordMatches) {
+      return json({ error: "Admin password is incorrect." }, 401);
+    }
+    const token = randomHex(32);
+    const now = Math.floor(Date.now() / 1000);
+    await env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at <= ?").bind(now).run();
+    await env.DB.prepare("INSERT INTO admin_sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)")
+      .bind(await sha256Hex(token), now, now + ADMIN_SESSION_SECONDS).run();
+    return json({ ok: true, expiresAt: now + ADMIN_SESSION_SECONDS }, 200, { "set-cookie": adminCookie(token), "cache-control": "no-store" });
+  }
+
+  const token = getCookie(request, ADMIN_COOKIE);
+  const now = Math.floor(Date.now() / 1000);
+  const session = token ? await env.DB.prepare("SELECT token_hash FROM admin_sessions WHERE token_hash = ? AND expires_at > ?")
+    .bind(await sha256Hex(token), now).first() : null;
+  if (!session) return json({ error: "Admin session required." }, 401, { "cache-control": "no-store" });
+
+  if (path === "/api/admin/logout" && request.method === "POST") {
+    await env.DB.prepare("DELETE FROM admin_sessions WHERE token_hash = ?").bind(session.token_hash).run();
+    return json({ ok: true }, 200, { "set-cookie": adminCookie("", 0), "cache-control": "no-store" });
+  }
+  if (path === "/api/admin/summary" && request.method === "GET") {
+    const [users, conversations, messages, sessions, imageUsage, shares, database] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS count FROM accounts").first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM conversations").first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM messages").first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM account_sessions WHERE expires_at > ?").bind(now).first(),
+      env.DB.prepare("SELECT COALESCE(SUM(count), 0) AS count FROM image_usage").first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM share_links WHERE revoked_at IS NULL AND expires_at > ?").bind(Date.now()).first(),
+      env.DB.prepare("SELECT 1 AS ok").first(),
+    ]);
+    const recentUsers = await env.DB.prepare("SELECT contact, created_at FROM accounts ORDER BY created_at DESC LIMIT 50").all();
+    return json({
+      ok: true,
+      health: { database: database?.ok === 1 ? "ok" : "unavailable", workersAI: env.AI ? "configured" : "missing" },
+      metrics: {
+        users: Number(users?.count || 0), conversations: Number(conversations?.count || 0),
+        messages: Number(messages?.count || 0), activeSessions: Number(sessions?.count || 0),
+        imageGenerations: Number(imageUsage?.count || 0), activeShareLinks: Number(shares?.count || 0),
+      },
+      usersList: recentUsers.results || [],
+    }, 200, { "cache-control": "no-store" });
+  }
+  return json({ error: "Admin API route not found." }, 404, { "cache-control": "no-store" });
+}
+
 async function routeApi(request, env, owner, trace) {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
+
+  if (path.startsWith("/api/admin/")) return adminRoute(request, env, path);
 
   if (path === "/api/account" && method === "GET") {
     return ownerJson({ loggedIn: Boolean(owner.loggedIn), username: owner.username || "Guest" }, owner);

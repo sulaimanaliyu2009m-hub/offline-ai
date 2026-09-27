@@ -390,6 +390,53 @@ test("share links expose only random bearer tokens, expire, and load read-only o
   assert.equal(revokedLink.status,404);
 });
 
+test("admin endpoints require the private password and a server-side HttpOnly session", async () => {
+  const statements = [];
+  const db = {
+    prepare(sql) {
+      return {
+        sql, args: [], bind(...args) { this.args = args; return this; },
+        async first() {
+          if (this.sql.includes("JOIN accounts")) return null;
+          if (this.sql.includes("account_auth_attempts")) return { n: 0 };
+          if (this.sql.includes("FROM admin_sessions")) return this.args[0] === savedSessionHash ? { token_hash: savedSessionHash } : null;
+          if (this.sql.includes("COUNT(*) AS count FROM accounts")) return { count: 3 };
+          if (this.sql.includes("COUNT(*) AS count FROM conversations")) return { count: 7 };
+          if (this.sql.includes("COUNT(*) AS count FROM messages")) return { count: 10 };
+          if (this.sql.includes("COUNT(*) AS count FROM account_sessions")) return { count: 2 };
+          if (this.sql.includes("SUM(count)")) return { count: 4 };
+          if (this.sql.includes("COUNT(*) AS count FROM share_links")) return { count: 1 };
+          if (this.sql.includes("SELECT 1 AS ok")) return { ok: 1 };
+          return null;
+        },
+        async all() { return { results: [{ contact: "owner@example.test", created_at: 123 }] }; },
+        async run() { statements.push({ sql: this.sql, args: this.args }); if(this.sql.includes("INSERT INTO admin_sessions"))savedSessionHash=this.args[0]; return { success:true,meta:{changes:1} }; },
+      };
+    },
+  };
+  let savedSessionHash = null;
+  const env = { DB: db, ADMIN_PASSWORD: "A-long-private-admin-passphrase-2026" , AI:{} };
+  const unauthorized = await worker.fetch(new Request("https://example.test/api/admin/summary"), env);
+  assert.equal(unauthorized.status, 401);
+
+  const login = await worker.fetch(new Request("https://example.test/api/admin/login", {
+    method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({password:env.ADMIN_PASSWORD}),
+  }),env);
+  const loginBody=await login.json();
+  assert.equal(login.status,200);
+  const cookie=login.headers.get("set-cookie");
+  assert.match(cookie,/amiir_ai_admin=.*HttpOnly/);
+  assert.match(cookie,/SameSite=Strict/);
+  assert.equal(savedSessionHash.length,64);
+  assert.equal(statements.some(row=>row.args.includes(env.ADMIN_PASSWORD)),false);
+
+  const summary=await worker.fetch(new Request("https://example.test/api/admin/summary",{headers:{cookie:cookie.split(';')[0]}}),env);
+  const summaryBody=await summary.json();
+  assert.equal(summary.status,200);
+  assert.deepEqual(summaryBody.metrics,{users:3,conversations:7,messages:10,activeSessions:2,imageGenerations:4,activeShareLinks:1});
+  assert.deepEqual(summaryBody.usersList,[{contact:"owner@example.test",created_at:123}]);
+});
+
 test("a Workers AI provider failure returns a traceable error instead of hiding the cause", async () => {
   const db = {
     prepare() {

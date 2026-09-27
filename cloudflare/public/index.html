@@ -52,6 +52,19 @@
     #conversation-project { max-width:180px; padding:7px 9px; border:1px solid #dedee8; border-radius:9px; background:var(--surface); color:var(--ink); font:inherit; font-size:12px; }
     body.shared-view .sidebar,body.shared-view .topbar,body.shared-view .composer-wrap,body.shared-view #create-panel,body.shared-view #settings-panel { display:none !important; }
     body.shared-view .main { width:min(100%,900px); margin:0 auto; }
+    body.admin-view .sidebar,body.admin-view .topbar,body.admin-view .composer-wrap,body.admin-view .chat-area,body.admin-view #create-panel,body.admin-view #settings-panel,body.admin-view #shared-heading { display:none !important; }
+    body.admin-view .main { width:min(100%,1000px); margin:0 auto; }
+    #admin-panel { width:100%; max-width:920px; margin:0 auto; padding:36px 24px 52px; overflow:auto; }
+    #admin-panel h1 { margin:0 0 8px; font-size:30px; }
+    #admin-panel form { display:grid; gap:10px; max-width:420px; }
+    #admin-panel input { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; }
+    #admin-panel button { padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); cursor:pointer; }
+    #admin-panel table { width:100%; border-collapse:collapse; font-size:13px; }
+    #admin-panel th,#admin-panel td { padding:10px; border-bottom:1px solid var(--line); text-align:left; }
+    .admin-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:20px 0; }
+    .admin-metric { padding:16px; border:1px solid var(--line); border-radius:13px; background:var(--surface); }
+    .admin-metric strong { display:block; font-size:24px; }
+    .admin-status { color:var(--muted); font-size:13px; }
     #shared-heading { padding:24px 28px 4px; color:var(--muted); font-size:13px; }
     #shared-heading h1 { margin:0 0 6px; color:var(--ink); font-size:22px; }
     #shared-heading a { color:var(--accent); }
@@ -347,6 +360,15 @@
   </aside>
   <main class="main">
     <header class="topbar"><button id="desktop-sidebar-toggle" class="desktop-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">☰</button><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span><span id="conversation-title" class="conversation-title" aria-live="polite"></span><label class="project-picker-label" for="conversation-project">Project</label><select id="conversation-project" aria-label="Choose project for this conversation"><option value="">No project</option></select><span class="model-tag" aria-label="Current model: Cloudflare Workers AI Llama 3.1 8B">Llama 3.1 8B</span></header>
+    <section id="admin-panel" hidden aria-labelledby="admin-heading">
+      <div id="admin-login-panel"><h1 id="admin-heading">Amiir AI administration</h1><p class="admin-status">Owner access only. Sign in with the private ADMIN_PASSWORD configured as a Cloudflare Worker secret.</p>
+        <form id="admin-login-form"><label for="admin-password-input">Admin password</label><input id="admin-password-input" type="password" autocomplete="current-password" minlength="16" required><button id="admin-login-button" type="submit">Sign in</button></form><p id="admin-login-status" role="status" aria-live="polite"></p>
+      </div>
+      <div id="admin-dashboard" hidden><h1>Admin dashboard</h1><p id="admin-health" class="admin-status" role="status"></p><div id="admin-metrics" class="admin-metrics"></div>
+        <div class="settings-card"><h2>Recent accounts</h2><p>Account contact details and creation dates only; chat contents are not shown here.</p><div style="overflow:auto"><table><thead><tr><th>Email</th><th>Created</th></tr></thead><tbody id="admin-users"></tbody></table></div></div>
+        <button type="button" id="admin-refresh">Refresh</button> <button type="button" id="admin-logout">Sign out</button><p id="admin-dashboard-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
     <section id="shared-heading" hidden><h1 id="shared-title"></h1><span>This is a read-only Amiir AI conversation.</span> <a href="/">Open Amiir AI</a></section>
     <section class="chat-area" id="chat-area">
       <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><div id="starter-prompts"><button type="button" class="starter-prompt" data-starter="Explain a difficult idea in simple terms">✦ &nbsp; Explain something</button><button type="button" class="starter-prompt" data-starter="Help me write a clear, polished message about ">✎ &nbsp; Help me write</button><button type="button" class="starter-prompt" data-starter="Help me debug this code: ">⌘ &nbsp; Debug code</button><button type="button" class="starter-prompt" data-starter="Give me a few creative ideas for ">✧ &nbsp; Brainstorm ideas</button><button type="button" class="starter-prompt" data-starter="Summarize this file for my exam." data-starter-action="upload">▤ &nbsp; Analyze a file</button><button type="button" class="starter-prompt" data-starter-action="create-image">▧ &nbsp; Create an image</button></div></div>
@@ -1712,6 +1734,37 @@
       for(const message of data.messages||[]) showMessage(message.role,message.content);
       if(!data.messages?.length){const empty=document.createElement('p');empty.className='history-empty';empty.textContent='This conversation has no messages.';messages.append(empty);}
     }
+    async function loadAdminSummary() {
+      const response=await fetch('/api/admin/summary',{cache:'no-store'});
+      const data=await response.json().catch(()=>({}));
+      if(response.status===401){document.querySelector('#admin-dashboard').hidden=true;document.querySelector('#admin-login-panel').hidden=false;return;}
+      if(!response.ok)throw new Error(data.error||'Could not load admin status.');
+      document.querySelector('#admin-login-panel').hidden=true;
+      document.querySelector('#admin-dashboard').hidden=false;
+      document.querySelector('#admin-health').textContent=`Database: ${data.health.database} · Workers AI binding: ${data.health.workersAI}`;
+      const metricNames={users:'Accounts',conversations:'Conversations',messages:'Messages',activeSessions:'Active sessions',imageGenerations:'Image generations',activeShareLinks:'Active share links'};
+      const metrics=document.querySelector('#admin-metrics');metrics.replaceChildren();
+      for(const [key,label] of Object.entries(metricNames)){const card=document.createElement('div');card.className='admin-metric';const count=document.createElement('strong');count.textContent=String(data.metrics[key]??0);const caption=document.createElement('span');caption.textContent=label;card.append(count,caption);metrics.append(card);}
+      const users=document.querySelector('#admin-users');users.replaceChildren();
+      for(const user of data.usersList||[]){const row=document.createElement('tr');const contact=document.createElement('td');contact.textContent=user.contact;const created=document.createElement('td');const stamp=Number(user.created_at||0);created.textContent=stamp?new Date(stamp*1000).toLocaleString():'—';row.append(contact,created);users.append(row);}
+      document.querySelector('#admin-dashboard-status').textContent='';
+    }
+    document.querySelector('#admin-login-form').addEventListener('submit',async event=>{
+      event.preventDefault();const button=document.querySelector('#admin-login-button');button.disabled=true;
+      const status=document.querySelector('#admin-login-status');status.textContent='Signing in…';
+      try{
+        const response=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.querySelector('#admin-password-input').value})});
+        const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Admin sign-in failed.');
+        document.querySelector('#admin-password-input').value='';await loadAdminSummary();
+      }catch(error){status.textContent=error.message;}
+      finally{button.disabled=false;}
+    });
+    document.querySelector('#admin-refresh').addEventListener('click',()=>loadAdminSummary().catch(error=>{document.querySelector('#admin-dashboard-status').textContent=error.message;}));
+    document.querySelector('#admin-logout').addEventListener('click',async()=>{
+      const status=document.querySelector('#admin-dashboard-status');
+      try{const response=await fetch('/api/admin/logout',{method:'POST'});if(!response.ok)throw new Error('Could not sign out.');document.querySelector('#admin-dashboard').hidden=true;document.querySelector('#admin-login-panel').hidden=false;status.textContent='';}
+      catch(error){status.textContent=error.message;}
+    });
     function fileAsDataUrl(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1994,7 +2047,11 @@
       }
     });
     const sharedRoute = location.pathname.match(/^\/share\/([A-Za-z0-9_-]{40,50})\/?$/);
-    if (sharedRoute) {
+    const adminRoute = /^\/admin\/?$/.test(location.pathname);
+    if (adminRoute) {
+      document.body.classList.add('admin-view');document.querySelector('#admin-panel').hidden=false;
+      loadAdminSummary().catch(error=>{document.querySelector('#admin-login-status').textContent=error.message;});
+    } else if (sharedRoute) {
       loadSharedConversation(sharedRoute[1]).catch(error => {
         document.querySelector('#shared-title').textContent = 'Shared conversation unavailable';
         const notice=document.createElement('p');notice.className='history-empty';notice.textContent=error.message;
