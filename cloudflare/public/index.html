@@ -48,6 +48,8 @@
     .conversation-title { max-width:min(48vw,520px); overflow:hidden; color:var(--muted); font-size:13px; font-weight:450; text-overflow:ellipsis; white-space:nowrap; }
     #menu-toggle { display:none; width:36px; height:36px; border:0; border-radius:10px; background:transparent; color:#555666; cursor:pointer; font-size:19px; }
     .model-tag { color: #777980; font-size: 12px; font-weight: 450; margin-left: 8px; }
+    .project-picker-label { color:var(--muted); font-size:12px; font-weight:500; margin-left:auto; }
+    #conversation-project { max-width:180px; padding:7px 9px; border:1px solid #dedee8; border-radius:9px; background:var(--surface); color:var(--ink); font:inherit; font-size:12px; }
     .chat-area { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior:smooth; }
     #messages { width: min(100%, 850px); margin: 0 auto; padding: 30px 28px 44px; }
     .welcome { min-height: min(58vh, 520px); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 24px; }
@@ -218,6 +220,7 @@
     .settings-card h2 { margin:0 0 6px; font-size:16px; }
     .settings-card p { margin:5px 0 14px; color:var(--muted); font-size:13px; }
     .settings-card select { width:min(100%,360px); padding:10px 12px; border:1px solid #dedee8; border-radius:10px; background:white; color:var(--ink); font:inherit; }
+    .settings-card textarea { display:block; width:100%; min-height:92px; margin:7px 0 13px; padding:11px 12px; resize:vertical; border:1px solid #dedee8; border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; line-height:1.5; }
     .setting-line { display:flex; align-items:center; gap:9px; margin:13px 0; font-size:14px; }
     .setting-line input { width:17px; height:17px; accent-color:var(--accent); }
     .accent-options { display:flex; flex-wrap:wrap; gap:10px; }
@@ -300,6 +303,8 @@
       #desktop-sidebar-toggle { display:none; }
       .topbar-name { font-size:14px; }
       .conversation-title { max-width:32vw; font-size:11px; }
+      .project-picker-label { display:none; }
+      #conversation-project { max-width:112px; min-width:74px; padding:7px 5px; font-size:11px; }
       .topbar-brandmark { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:9px; color:white; background:linear-gradient(145deg,#6158d0,#9b72d7); }
       .model-tag { display:none; }
       #messages { padding:18px 16px 28px; }
@@ -331,7 +336,7 @@
     <button class="nav-button account-button" id="account-button" aria-label="Account" title="Account">♙ &nbsp; <span class="nav-label">Account</span></button>
   </aside>
   <main class="main">
-    <header class="topbar"><button id="desktop-sidebar-toggle" class="desktop-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">☰</button><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span><span id="conversation-title" class="conversation-title" aria-live="polite"></span><span class="model-tag" aria-label="Current model: Cloudflare Workers AI Llama 3.1 8B">Llama 3.1 8B</span></header>
+    <header class="topbar"><button id="desktop-sidebar-toggle" class="desktop-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">☰</button><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span><span id="conversation-title" class="conversation-title" aria-live="polite"></span><label class="project-picker-label" for="conversation-project">Project</label><select id="conversation-project" aria-label="Choose project for this conversation"><option value="">No project</option></select><span class="model-tag" aria-label="Current model: Cloudflare Workers AI Llama 3.1 8B">Llama 3.1 8B</span></header>
     <section class="chat-area" id="chat-area">
       <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><div id="starter-prompts"><button type="button" class="starter-prompt" data-starter="Explain a difficult idea in simple terms">✦ &nbsp; Explain something</button><button type="button" class="starter-prompt" data-starter="Help me write a clear, polished message about ">✎ &nbsp; Help me write</button><button type="button" class="starter-prompt" data-starter="Help me debug this code: ">⌘ &nbsp; Debug code</button><button type="button" class="starter-prompt" data-starter="Give me a few creative ideas for ">✧ &nbsp; Brainstorm ideas</button><button type="button" class="starter-prompt" data-starter="Summarize this file for my exam." data-starter-action="upload">▤ &nbsp; Analyze a file</button><button type="button" class="starter-prompt" data-starter-action="create-image">▧ &nbsp; Create an image</button></div></div>
       <div id="messages" aria-live="polite"></div>
@@ -376,6 +381,18 @@
         <label class="setting-line"><input id="reduced-motion-setting" type="checkbox"> Reduce animations</label>
       </div>
       <div class="settings-card"><h2>Voice</h2><label class="setting-line"><input id="speak-setting" type="checkbox"> Speak replies aloud automatically</label></div>
+      <div class="settings-card"><h2>Memory and custom instructions</h2><p>Only details you choose are saved. Memory is private to your guest session or account, can be switched off, and is never automatically inferred from chats.</p>
+        <label class="setting-line"><input id="memory-enabled-setting" type="checkbox"> Use my saved memory in replies</label>
+        <label for="memory-content-setting">Saved memory</label><textarea id="memory-content-setting" maxlength="2000" placeholder="Optional details or preferences you want Amiir AI to remember"></textarea>
+        <label for="custom-instructions-setting">Custom instructions</label><textarea id="custom-instructions-setting" maxlength="2000" placeholder="How would you like Amiir AI to respond? For example, explain technical terms simply."></textarea>
+        <div class="settings-actions"><button type="button" id="save-personalization">Save personalization</button><button type="button" class="danger-action" id="clear-memory">Clear saved memory</button></div><p id="personalization-status" role="status" aria-live="polite"></p>
+      </div>
+      <div class="settings-card"><h2>Projects</h2><p>Projects group conversations and apply the instructions you write here. They do not upload or store files.</p>
+        <label for="project-list">Your projects</label><select id="project-list"><option value="">Choose a project</option></select>
+        <label for="project-name">Project name</label><input id="project-name" maxlength="80" autocomplete="off" placeholder="For example, School or Coding">
+        <label for="project-instructions">Project instructions</label><textarea id="project-instructions" maxlength="2000" placeholder="Optional instructions for chats in this project"></textarea>
+        <div class="settings-actions"><button type="button" id="create-project">Create project</button><button type="button" id="save-project" disabled>Save changes</button><button type="button" id="delete-project" class="danger-action" disabled>Delete project</button></div><p id="project-status" role="status" aria-live="polite"></p>
+      </div>
       <div class="settings-card"><h2>Privacy</h2><p>Conversations are saved to your Amiir AI guest session or account. Uploaded files are processed for your request; the public Worker does not save their contents in chat history. You can export or delete conversations below.</p></div>
       <div class="settings-card"><h2>Account</h2><p>Manage sign-in, registration, and password recovery.</p><div class="settings-actions"><button type="button" id="settings-account">Open account</button></div></div>
       <div class="settings-card"><h2>Your conversations</h2><div class="settings-actions"><button type="button" id="export-chats">Export conversations</button><button type="button" class="danger-action" id="delete-current-chat">Delete current chat</button><button type="button" id="reset-settings">Reset preferences</button></div><p id="settings-status" role="status" aria-live="polite"></p></div>
@@ -428,6 +445,12 @@
     let selectedChatFile = null;
     let selectedChatImageUrl = null;
     let conversationCache = [];
+    let historySearchResults = null;
+    let historySearchSequence = 0;
+    let historySearchTimer = 0;
+    let historySearchLoading = false;
+    let historySearchError = '';
+    const historySearchInput = document.querySelector('#history-search');
     let showArchivedHistory = false;
     const attachmentDescription = document.querySelector('#attachment-description');
     const autoSpeak = document.querySelector('#auto-speak');
@@ -440,6 +463,17 @@
     const speakSetting = document.querySelector('#speak-setting');
     const reducedMotionSetting = document.querySelector('#reduced-motion-setting');
     const settingsStatus = document.querySelector('#settings-status');
+    const memoryEnabledSetting = document.querySelector('#memory-enabled-setting');
+    const memoryContentSetting = document.querySelector('#memory-content-setting');
+    const customInstructionsSetting = document.querySelector('#custom-instructions-setting');
+    const personalizationStatus = document.querySelector('#personalization-status');
+    const conversationProject = document.querySelector('#conversation-project');
+    const projectList = document.querySelector('#project-list');
+    const projectNameInput = document.querySelector('#project-name');
+    const projectInstructionsInput = document.querySelector('#project-instructions');
+    const projectStatus = document.querySelector('#project-status');
+    let projectCache = [];
+    let selectedProjectId = '';
     function applyPreferences() {
       rootElement.dataset.theme = localStorage.getItem('offlineAiTheme') || 'system';
       rootElement.dataset.accent = localStorage.getItem('offlineAiAccent') || 'violet';
@@ -459,6 +493,118 @@
     enterSetting.addEventListener('change', () => localStorage.setItem('offlineAiEnterToSend', String(enterSetting.checked)));
     speakSetting.addEventListener('change', () => { autoSpeak.checked = speakSetting.checked; localStorage.setItem('offlineAiSpeakReplies', String(speakSetting.checked)); });
     reducedMotionSetting.addEventListener('change', () => { localStorage.setItem('offlineAiReducedMotion', String(reducedMotionSetting.checked)); applyPreferences(); });
+    async function loadPersonalizationSettings() {
+      const response = await fetch('/api/preferences');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not load memory and custom instructions.');
+      const preferences = data.preferences || {};
+      memoryEnabledSetting.checked = preferences.memoryEnabled === true;
+      memoryContentSetting.value = typeof preferences.memory === 'string' ? preferences.memory : '';
+      customInstructionsSetting.value = typeof preferences.customInstructions === 'string' ? preferences.customInstructions : '';
+    }
+    function renderProjectSelectors() {
+      const activeProject = projectCache.find(project => project.id === selectedProjectId);
+      conversationProject.replaceChildren(new Option('No project', ''));
+      projectCache.forEach(project => conversationProject.add(new Option(project.name, project.id)));
+      conversationProject.value = activeProject ? selectedProjectId : '';
+      const editingId = projectList.value;
+      projectList.replaceChildren(new Option('Choose a project', ''));
+      projectCache.forEach(project => projectList.add(new Option(project.name, project.id)));
+      projectList.value = projectCache.some(project => project.id === editingId) ? editingId : '';
+    }
+    async function loadProjects() {
+      const response = await fetch('/api/projects');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not load projects. Apply database migration 0006 if it has not been applied.');
+      projectCache = Array.isArray(data.projects) ? data.projects : [];
+      renderProjectSelectors();
+    }
+    function updateProjectEditor() {
+      const project = projectCache.find(item => item.id === projectList.value);
+      projectNameInput.value = project?.name || '';
+      projectInstructionsInput.value = project?.instructions || '';
+      document.querySelector('#save-project').disabled = !project;
+      document.querySelector('#delete-project').disabled = !project;
+      projectStatus.textContent = '';
+    }
+    async function saveProjectRequest(path, payload) {
+      const response = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not save project.');
+      return data;
+    }
+    projectList.addEventListener('change', updateProjectEditor);
+    document.querySelector('#create-project').addEventListener('click', async () => {
+      const button = document.querySelector('#create-project'); button.disabled = true; projectStatus.textContent = 'Creating…';
+      try {
+        const data = await saveProjectRequest('/api/projects', { name:projectNameInput.value, instructions:projectInstructionsInput.value });
+        await loadProjects(); projectList.value = data.project.id; updateProjectEditor();
+        selectedProjectId = data.project.id; conversationProject.value = selectedProjectId;
+        projectStatus.textContent = 'Project created. New chats will use it until you choose another project.';
+      } catch (error) { projectStatus.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
+    document.querySelector('#save-project').addEventListener('click', async () => {
+      const button = document.querySelector('#save-project'); button.disabled = true; projectStatus.textContent = 'Saving…';
+      try {
+        await saveProjectRequest('/api/projects/update', { project_id:projectList.value, name:projectNameInput.value, instructions:projectInstructionsInput.value });
+        await loadProjects(); updateProjectEditor(); projectStatus.textContent = 'Project saved.';
+      } catch (error) { projectStatus.textContent = error.message; }
+      finally { button.disabled = !projectList.value; }
+    });
+    document.querySelector('#delete-project').addEventListener('click', async () => {
+      const project = projectCache.find(item => item.id === projectList.value); if (!project) return;
+      if (!confirm(`Delete project “${project.name}”? Conversations will stay and become unassigned.`)) return;
+      const button = document.querySelector('#delete-project'); button.disabled = true; projectStatus.textContent = 'Deleting…';
+      try {
+        await saveProjectRequest('/api/projects/delete', { project_id:project.id });
+        if (selectedProjectId === project.id) { selectedProjectId = ''; conversationProject.value = ''; }
+        await loadProjects(); updateProjectEditor(); await refreshConversationListSafely('Project deleted');
+        projectStatus.textContent = 'Project deleted. Its conversations were kept.';
+      } catch (error) { projectStatus.textContent = error.message; }
+      finally { button.disabled = !projectList.value; }
+    });
+    conversationProject.addEventListener('change', async () => {
+      const nextProjectId = conversationProject.value;
+      if (!activeConversationId) { selectedProjectId = nextProjectId; return; }
+      const previous = selectedProjectId; conversationProject.disabled = true;
+      try {
+        await saveProjectRequest('/api/conversations/project', { conversation_id:activeConversationId, project_id:nextProjectId || null });
+        selectedProjectId = nextProjectId;
+        await refreshConversationListSafely('Project updated');
+      } catch (error) { conversationProject.value = previous; voiceStatus.textContent = error.message; }
+      finally { conversationProject.disabled = false; }
+    });
+    async function savePersonalizationSettings() {
+      const button = document.querySelector('#save-personalization');
+      button.disabled = true;
+      personalizationStatus.textContent = 'Saving…';
+      try {
+        const response = await fetch('/api/preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            memoryEnabled: memoryEnabledSetting.checked,
+            memory: memoryContentSetting.value,
+            customInstructions: customInstructionsSetting.value,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Could not save personalization.');
+        personalizationStatus.textContent = 'Personalization saved.';
+      } catch (error) {
+        personalizationStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+    document.querySelector('#save-personalization').addEventListener('click', savePersonalizationSettings);
+    document.querySelector('#clear-memory').addEventListener('click', async () => {
+      if (!confirm('Clear the saved memory for this guest session or account? Custom instructions will stay.')) return;
+      memoryEnabledSetting.checked = false;
+      memoryContentSetting.value = '';
+      await savePersonalizationSettings();
+    });
     document.querySelector('#reset-settings').addEventListener('click', () => {
       for (const key of ['offlineAiTheme','offlineAiAccent','offlineAiTextSize','offlineAiEnterToSend','offlineAiSpeakReplies','offlineAiReducedMotion','amiirSidebarCollapsed']) localStorage.removeItem(key);
       appSidebar.classList.remove('collapsed');
@@ -599,7 +745,24 @@
       historyTab.setAttribute('aria-expanded', String(expanded));
       if (expanded) document.querySelector('#chat-tab').classList.remove('active');
     });
-    document.querySelector('#history-search').addEventListener('input', renderConversationList);
+    historySearchInput.addEventListener('input', () => {
+      const sequence = ++historySearchSequence;
+      clearTimeout(historySearchTimer);
+      const query = historySearchInput.value.trim();
+      historySearchError = '';
+      if (!query) {
+        historySearchLoading = false;
+        historySearchResults = null;
+        renderConversationList();
+        return;
+      }
+      historySearchLoading = true;
+      historySearchResults = [];
+      renderConversationList(historySearchResults);
+      historySearchTimer = setTimeout(() => {
+        searchConversations(query, sequence).catch(error => { voiceStatus.textContent = error.message; });
+      }, 220);
+    });
     document.querySelector('#recent-history-filter').addEventListener('click', () => {
       showArchivedHistory = false;
       document.querySelector('#recent-history-filter').setAttribute('aria-pressed','true');
@@ -1234,18 +1397,18 @@
         document.body.classList.remove('generating','can-stop');document.querySelector('#send-button').disabled=false;button.disabled=false;updateUserEditAvailability();
       }
     }
-    function renderConversationList() {
+    function renderConversationList(conversations = historySearchResults || conversationCache) {
       const list = document.querySelector('#history-items');
       const activeConversation = conversationCache.find(conversation => conversation.id === activeConversationId);
       document.querySelector('#conversation-title').textContent = activeConversation && activeConversation.title !== 'New chat' ? activeConversation.title : '';
       const query = document.querySelector('#history-search').value.trim().toLowerCase();
       list.replaceChildren();
-      const conversations = conversationCache.filter(conversation =>
-        `${conversation.title || 'New chat'} ${conversation.preview || ''}`.toLowerCase().includes(query));
       if (!conversations.length) {
         const empty = document.createElement('div');
         empty.className = 'history-empty';
-        empty.textContent = query ? 'No matching conversations.' : showArchivedHistory ? 'No archived conversations.' : 'Your conversations will appear here.';
+        empty.textContent = query
+          ? historySearchLoading ? 'Searching conversations…' : historySearchError || 'No matching conversations.'
+          : showArchivedHistory ? 'No archived conversations.' : 'Your conversations will appear here.';
         list.append(empty);
         return;
       }
@@ -1290,6 +1453,38 @@
         }
       }
     }
+    async function searchConversations(query, sequence = ++historySearchSequence) {
+      if (sequence !== historySearchSequence) return [];
+      if (!query) {
+        historySearchResults = null;
+        historySearchLoading = false;
+        historySearchError = '';
+        renderConversationList();
+        return conversationCache;
+      }
+      historySearchLoading = true;
+      historySearchError = '';
+      renderConversationList([]);
+      try {
+        const params = new URLSearchParams({ archived: String(showArchivedHistory), q: query });
+        const response = await fetch('/api/conversations?' + params.toString());
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `Could not search conversations (HTTP ${response.status}).`);
+        if (sequence !== historySearchSequence) return [];
+        historySearchResults = Array.isArray(data.conversations) ? data.conversations : [];
+        historySearchLoading = false;
+        renderConversationList(historySearchResults);
+        return historySearchResults;
+      } catch (error) {
+        if (sequence === historySearchSequence) {
+          historySearchLoading = false;
+          historySearchResults = [];
+          historySearchError = error.message || 'Could not search conversations.';
+          renderConversationList(historySearchResults);
+        }
+        throw error;
+      }
+    }
     async function refreshConversationList() {
       const response = await fetch('/api/conversations?archived=' + String(showArchivedHistory));
       const data = await response.json().catch(() => ({}));
@@ -1299,6 +1494,11 @@
         throw new Error(`${detail || `Could not load chat history (HTTP ${response.status}).`}${requestId ? ` Reference: ${requestId}.` : ''}`);
       }
       conversationCache = Array.isArray(data.conversations) ? data.conversations : [];
+      const query = historySearchInput.value.trim();
+      if (query) return searchConversations(query);
+      historySearchResults = null;
+      historySearchLoading = false;
+      historySearchError = '';
       renderConversationList();
       return conversationCache;
     }
@@ -1375,13 +1575,23 @@
       closeSidebar();
       await refreshConversationListSafely('The conversation was opened');
       const selected = conversationCache.find(conversation => conversation.id === activeConversationId);
+      selectedProjectId = selected?.project_id || '';
+      renderProjectSelectors();
       document.querySelector('#conversation-title').textContent = selected && selected.title !== 'New chat' ? selected.title : '';
     }
     async function createNewChat() {
-      const response = await fetch('/api/conversations', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New chat'})});
+      clearTimeout(historySearchTimer);
+      historySearchSequence += 1;
+      historySearchInput.value = '';
+      historySearchResults = null;
+      historySearchLoading = false;
+      historySearchError = '';
+      const response = await fetch('/api/conversations', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New chat',project_id:selectedProjectId||null})});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not start a new chat.');
       activeConversationId = data.id;
+      selectedProjectId = data.project_id || '';
+      renderProjectSelectors();
       document.querySelector('#conversation-title').textContent = '';
       showArchivedHistory = false;
       document.querySelector('#recent-history-filter').setAttribute('aria-pressed','true');
@@ -1677,6 +1887,8 @@
     loadHistory().catch(error => {
       voiceStatus.textContent = 'Saved chats could not be loaded. You can still start a chat; ' + error.message;
     });
+    loadPersonalizationSettings().catch(error => { personalizationStatus.textContent = error.message; });
+    loadProjects().catch(error => { projectStatus.textContent = error.message; });
   </script>
 </body>
 </html>

@@ -60,7 +60,7 @@ test("editing the latest user turn is owner-scoped and replaces its saved pair a
         args: [],
         bind(...args) { this.args = args; return this; },
         async first() {
-          if (this.sql.includes("SELECT id, title FROM conversations")) return { id: conversationId, title: "Existing chat" };
+          if (this.sql.includes("SELECT id, title, project_id FROM conversations")) return { id: conversationId, title: "Existing chat", project_id: null };
           return null;
         },
         async all() {
@@ -128,6 +128,182 @@ test("a missing D1 migration returns a safe diagnostic and request ID", async ()
   } finally {
     console.error = originalError;
   }
+});
+
+test("conversation search queries owner-scoped message text and escapes LIKE wildcards", async () => {
+  let query;
+  let bindings;
+  const db = {
+    prepare(sql) {
+      query = sql;
+      return {
+        bind(...args) { bindings = args; return this; },
+        async all() { return { results: [] }; },
+      };
+    },
+  };
+  const request = new Request("https://example.test/api/conversations?archived=false&q=100%25_complete");
+  const response = await worker.fetch(request, { DB: db });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.conversations, []);
+  assert.match(query, /title LIKE \? ESCAPE char\(92\)/);
+  assert.match(query, /projects\.name LIKE \? ESCAPE char\(92\)/);
+  assert.match(query, /m\.content LIKE \? ESCAPE char\(92\)/);
+  assert.match(query, /m\.owner_id = conversations\.owner_id/);
+  assert.match(query, /owner_id = \?/);
+  assert.equal(bindings[1], "%100\\%\\_complete%");
+  assert.equal(bindings[1], bindings[2]);
+  assert.equal(bindings[1], bindings[3]);
+});
+
+test("the public health route reports only D1 reachability and Workers AI binding presence", async () => {
+  const request = new Request("https://example.test/health");
+  const healthy = await worker.fetch(request, {
+    DB: { prepare(sql) { assert.equal(sql, "SELECT 1 AS ok"); return { async first() { return { ok: 1 }; } }; } },
+    AI: {},
+    ASSETS: { async fetch() { throw new Error("health must be handled by the Worker"); } },
+  });
+  const healthyBody = await healthy.json();
+  assert.equal(healthy.status, 200);
+  assert.deepEqual(healthyBody.services, { database: "ok", workersAI: "configured" });
+  assert.equal(healthy.headers.get("cache-control"), "no-store");
+  assert.equal(healthy.headers.get("x-request-id"), healthyBody.requestId);
+
+  const unhealthy = await worker.fetch(request, {
+    DB: { prepare() { return { async first() { throw new Error("database internals"); } }; } },
+    ASSETS: { async fetch() { throw new Error("health must be handled by the Worker"); } },
+  });
+  const unhealthyBody = await unhealthy.json();
+  assert.equal(unhealthy.status, 503);
+  assert.deepEqual(unhealthyBody.services, { database: "unavailable", workersAI: "missing" });
+  assert.doesNotMatch(JSON.stringify(unhealthyBody), /database internals/);
+});
+
+test("personalization is owner-scoped and only explicitly enabled memory reaches the model", async () => {
+  const ownerId = "11111111-2222-4333-8444-555555555555";
+  const writes = [];
+  const db = {
+    prepare(sql) {
+      return {
+        sql,
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (this.sql.includes("FROM user_preferences")) {
+            assert.equal(this.args[0], ownerId);
+            return { memory_enabled: 1, memory_content: "Prefers short explanations", custom_instructions: "Use plain language" };
+          }
+          return null;
+        },
+        async all() { return { results: [] }; },
+        async run() { writes.push({ sql: this.sql, args: this.args }); return { success: true }; },
+      };
+    },
+    async batch(statements) { writes.push(...statements); return []; },
+  };
+  let systemPrompt;
+  const request = new Request("https://example.test/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `offline_ai_guest=${ownerId}` },
+    body: JSON.stringify({ message: "Explain photosynthesis" }),
+  });
+  const response = await worker.fetch(request, {
+    DB: db,
+    AI: { async run(_model, options) {
+      systemPrompt = options.messages[0].content;
+      return new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('data: {"response":"Plants make food using light."}\n\ndata: [DONE]\n\n')); controller.close(); } });
+    } },
+  });
+  assert.equal(response.status, 200);
+  await response.text();
+  assert.match(systemPrompt, /Prefers short explanations/);
+  assert.match(systemPrompt, /Use plain language/);
+  assert.ok(writes.some(write => write.sql.includes("INSERT INTO messages")));
+});
+
+test("preference writes enforce length limits and persist only the requesting owner", async () => {
+  const ownerId = "11111111-2222-4333-8444-555555555555";
+  let saved;
+  const db = {
+    prepare(sql) {
+      return {
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async run() { saved = { sql, args: this.args }; return { success: true }; },
+      };
+    },
+  };
+  const request = new Request("https://example.test/api/preferences", {
+    method: "PUT",
+    headers: { "content-type": "application/json", cookie: `offline_ai_guest=${ownerId}` },
+    body: JSON.stringify({ memoryEnabled: false, memory: "Keep it off", customInstructions: "Use short answers" }),
+  });
+  const response = await worker.fetch(request, { DB: db });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(saved.args[0], ownerId);
+  assert.equal(saved.args[1], 0);
+  assert.equal(saved.args[2], "Keep it off");
+  assert.deepEqual(body.preferences, { memoryEnabled: false, memory: "Keep it off", customInstructions: "Use short answers" });
+
+  const tooLong = await worker.fetch(new Request("https://example.test/api/preferences", {
+    method: "PUT",
+    headers: { "content-type": "application/json", cookie: `offline_ai_guest=${ownerId}` },
+    body: JSON.stringify({ memoryEnabled: true, memory: "x".repeat(2001), customInstructions: "" }),
+  }), { DB: db });
+  assert.equal(tooLong.status, 413);
+  assert.equal(saved.args[2], "Keep it off");
+});
+
+test("projects are owner-scoped and project instructions are stored with project chats", async () => {
+  const ownerId = "11111111-2222-4333-8444-555555555555";
+  const writes = [];
+  const db = {
+    prepare(sql) {
+      return {
+        sql, args: [],
+        bind(...args) { this.args = args; return this; },
+        async all() { return { results: [] }; },
+        async first() { return null; },
+        async run() { writes.push({ sql: this.sql, args: this.args }); return { success: true }; },
+      };
+    },
+    async batch(statements) { writes.push(...statements); return []; },
+  };
+  const create = await worker.fetch(new Request("https://example.test/api/projects", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `offline_ai_guest=${ownerId}` },
+    body: JSON.stringify({ name: "School", instructions: "Explain terms simply." }),
+  }), { DB: db });
+  const created = await create.json();
+  assert.equal(create.status, 201);
+  assert.equal(writes[0].sql.includes("INSERT INTO projects"), true);
+  assert.equal(writes[0].args[1], ownerId);
+  assert.equal(writes[0].args[2], "School");
+  assert.equal(writes[0].args[3], "Explain terms simply.");
+
+  const assign = await worker.fetch(new Request("https://example.test/api/conversations/project", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `offline_ai_guest=${ownerId}` },
+    body: JSON.stringify({ conversation_id: "chat-1", project_id: created.project.id }),
+  }), { DB: {
+    ...db,
+    prepare(sql) {
+      return {
+        sql, args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (this.sql.includes("FROM conversations")) return { id: "chat-1" };
+          if (this.sql.includes("FROM projects")) return { id: created.project.id };
+          return null;
+        },
+        async run() { writes.push({ sql: this.sql, args: this.args }); return { success: true }; },
+      };
+    },
+  } });
+  assert.equal(assign.status, 200);
+  assert.ok(writes.some(write => write.sql.includes("UPDATE conversations SET project_id") && write.args[0] === created.project.id && write.args[2] === "chat-1" && write.args[3] === ownerId));
 });
 
 test("a Workers AI provider failure returns a traceable error instead of hiding the cause", async () => {
