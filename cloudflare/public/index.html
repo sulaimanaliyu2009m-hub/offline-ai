@@ -56,6 +56,35 @@
     .avatar { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border-radius: 50%; background: #e8e8e8; color: #333; font-size: 12px; font-weight: 650; }
     .message-row.assistant .avatar { background:linear-gradient(145deg,#6158d0,#8c73dc); color: white; }
     .message-content { min-width: 0; padding-top: 3px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .message-content.markdown { white-space:normal; }
+    .message-content.markdown p { margin:0 0 12px; }
+    .message-content.markdown p:last-child { margin-bottom:0; }
+    .message-content.markdown h1,.message-content.markdown h2,.message-content.markdown h3 { line-height:1.3; margin:20px 0 9px; }
+    .message-content.markdown ul,.message-content.markdown ol { padding-left:24px; margin:8px 0 13px; }
+    .message-content.markdown blockquote { margin:12px 0; padding:8px 14px; border-left:3px solid var(--accent); color:var(--muted); background:var(--soft); border-radius:0 9px 9px 0; }
+    .message-content.markdown a { color:var(--accent); text-underline-offset:3px; }
+    .message-content.markdown code { padding:2px 5px; border-radius:5px; background:var(--soft); font: .9em ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .message-content.markdown pre { position:relative; overflow:auto; margin:12px 0; padding:15px; border:1px solid var(--line); border-radius:12px; background:#f4f4f7; color:#252532; white-space:pre; }
+    .message-content.markdown pre code { padding:0; background:none; }
+    .message-tools { display:flex; gap:6px; flex-wrap:wrap; }
+    .message-tools button { border:0; border-radius:8px; padding:6px 8px; background:transparent; color:var(--muted); cursor:pointer; font-size:12px; }
+    .message-tools button:hover { color:var(--ink); background:var(--soft); }
+    .message-tools button:focus-visible,.nav-button:focus-visible,#menu-toggle:focus-visible,#chat button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .generation-status { color:var(--muted); font-size:12px; }
+    #stop-button { display:none; width:36px; height:36px; flex:0 0 36px; border:0; border-radius:50%; background:#f4e9eb; color:#9d3d4d; cursor:pointer; }
+    body.generating #stop-button { display:grid; place-items:center; }
+    body.generating #send-button { display:none; }
+    #starter-prompts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; width:min(100%,560px); margin:28px auto 0; }
+    .starter-prompt { padding:13px 15px; text-align:left; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--ink); cursor:pointer; }
+    .starter-prompt:hover { border-color:color-mix(in srgb,var(--accent) 40%,var(--line)); background:var(--soft); }
+    .sidebar.collapsed { width:72px; flex-basis:72px; padding-inline:10px; }
+    .sidebar.collapsed .brand { justify-content:center; padding-inline:0; }
+    .sidebar.collapsed .brand > span:last-child,.sidebar.collapsed .side-label,.sidebar.collapsed .nav-button .nav-label,.sidebar.collapsed #history-list { display:none; }
+    .sidebar.collapsed .nav-button { text-align:center; padding-inline:6px; font-size:0; }
+    .sidebar.collapsed .nav-button::first-letter { font-size:16px; }
+    .desktop-toggle { width:34px;height:34px;border:0;border-radius:9px;background:transparent;color:var(--muted);cursor:pointer; }
+    .desktop-toggle:hover { background:var(--soft); }
+    #history-search { width:calc(100% - 12px); margin:2px 6px 6px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); font:inherit; font-size:12px; }
     .chat-image { display:block; max-width:min(100%, 360px); max-height:320px; margin-top:10px; border-radius:12px; }
     .attachment-chip { display:inline-block; margin-top:8px; padding:6px 9px; border:1px solid var(--line); border-radius:8px; background:#fafafa; color:#555; font-size:12px; }
     .message-tools { margin-top:7px; }
@@ -171,6 +200,9 @@
     :root[data-theme="dark"] .welcome h1,:root[data-theme="dark"] .create-card h2,:root[data-theme="dark"] .settings-card h2 { color:#f1f1f5; }
     :root[data-theme="dark"] .create-card textarea,:root[data-theme="dark"] .create-card input[type=file],:root[data-theme="dark"] .create-card select,:root[data-theme="dark"] .settings-card select,:root[data-theme="dark"] #prompt { background:#222228; color:#f1f1f5; border-color:#464650; }
     :root[data-theme="dark"] .tool-tabs,:root[data-theme="dark"] .tool-tab.active,:root[data-theme="dark"] .prompt-chip { background:#30303a !important; color:#e8e8ee !important; border-color:#464650 !important; }
+    :root[data-theme="dark"] .message-content.markdown pre { background:#17171d;color:#eee;border-color:#41414b; }
+    :root[data-theme="dark"] .starter-prompt { background:#292930;color:#eee;border-color:#41414b; }
+    :root[data-theme="dark"] #history-search { background:#222228;color:#eee;border-color:#464650; }
     :root[data-theme="dark"] .settings-actions button,:root[data-theme="dark"] .accent-choice { background:#292930; color:#eee; border-color:#464650; }
     :root[data-theme="dark"] #account-dialog { background:#222228; color:#eee; border-color:#41414b; }
     :root[data-theme="dark"] #account-dialog input:not([type=checkbox]) { background:#19191e; color:#eee; caret-color:#aaa5ff; -webkit-text-fill-color:#eee; border-color:#464650; color-scheme:dark; }
@@ -185,6 +217,7 @@
       .history-options { opacity:1; }
       .topbar { height:56px; flex-basis:56px; padding:0 11px; gap:5px; }
       #menu-toggle { display:block; }
+      #desktop-sidebar-toggle { display:none; }
       .topbar-name { font-size:14px; }
       .topbar-brandmark { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:9px; color:white; background:linear-gradient(145deg,#6158d0,#9b72d7); }
       .model-tag { display:none; }
@@ -205,19 +238,19 @@
   <aside class="sidebar" id="app-sidebar">
     <div class="brand"><span class="brand-mark">✳</span><span>Amiir AI</span></div>
     <div class="side-label">Workspace</div>
-    <button class="nav-button new-chat-button" id="new-chat-tab">＋ &nbsp; New chat</button>
-    <button class="nav-button active" id="chat-tab">✳ &nbsp; Chat</button>
-    <button class="nav-button" id="create-tab">▧ &nbsp; Image & animation</button>
-    <button class="nav-button" id="history-tab" aria-expanded="false" aria-controls="history-list">◷ &nbsp; History</button>
-    <nav id="history-list" aria-label="Saved conversations" hidden><div class="history-empty">Your conversations will appear here.</div></nav>
-    <button class="nav-button" id="settings-tab">⚙ &nbsp; Settings</button>
-    <button class="nav-button" id="install-app" hidden>⇩ &nbsp; Install app</button>
-    <button class="nav-button account-button" id="account-button">♙ &nbsp; Account</button>
+    <button class="nav-button new-chat-button" id="new-chat-tab" aria-label="New chat" title="New chat">＋ &nbsp; <span class="nav-label">New chat</span></button>
+    <button class="nav-button active" id="chat-tab" aria-label="Chat" title="Chat">✳ &nbsp; <span class="nav-label">Chat</span></button>
+    <button class="nav-button" id="create-tab" aria-label="Images and animation" title="Images and animation">▧ &nbsp; <span class="nav-label">Image & animation</span></button>
+    <button class="nav-button" id="history-tab" aria-label="History" title="History" aria-expanded="false" aria-controls="history-list">◷ &nbsp; <span class="nav-label">History</span></button>
+    <nav id="history-list" aria-label="Saved conversations" hidden><input id="history-search" type="search" placeholder="Search chats" aria-label="Search conversations"><div class="history-empty">Your conversations will appear here.</div></nav>
+    <button class="nav-button" id="settings-tab" aria-label="Settings" title="Settings">⚙ &nbsp; <span class="nav-label">Settings</span></button>
+    <button class="nav-button" id="install-app" aria-label="Install app" title="Install app" hidden>⇩ &nbsp; <span class="nav-label">Install app</span></button>
+    <button class="nav-button account-button" id="account-button" aria-label="Account" title="Account">♙ &nbsp; <span class="nav-label">Account</span></button>
   </aside>
   <main class="main">
-    <header class="topbar"><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span></header>
+    <header class="topbar"><button id="desktop-sidebar-toggle" class="desktop-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">☰</button><button id="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button><span class="topbar-name"><span class="topbar-brandmark">✳</span>Amiir AI</span></header>
     <section class="chat-area" id="chat-area">
-      <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1></div>
+      <div id="welcome" class="welcome"><div class="welcome-mark">✳</div><h1>What can I help with?</h1><div id="starter-prompts"><button type="button" class="starter-prompt" data-starter="Explain a difficult idea in simple terms">✦ &nbsp; Explain something</button><button type="button" class="starter-prompt" data-starter="Help me write a clear, polished message about ">✎ &nbsp; Help me write</button><button type="button" class="starter-prompt" data-starter="Help me debug this code: ">⌘ &nbsp; Debug code</button><button type="button" class="starter-prompt" data-starter="Give me a few creative ideas for ">✧ &nbsp; Brainstorm ideas</button></div></div>
       <div id="messages" aria-live="polite"></div>
     </section>
     <section id="create-panel">
@@ -284,7 +317,7 @@
     <div class="composer-wrap">
       <p id="voice-status" role="status" aria-live="polite"></p>
       <div id="attachment-preview" hidden><img id="attachment-thumbnail" alt="Selected image" hidden><span id="attachment-description"></span><button type="button" id="remove-attachment" aria-label="Remove attached file">×</button></div>
-      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx,.pptx,.mp3,.m4a,.wav,.webm,.ogg,.opus,.flac,.aac" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Amiir AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
+      <form id="chat"><input id="chat-image" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.txt,.md,.csv,.docx,.pptx,.mp3,.m4a,.wav,.webm,.ogg,.opus,.flac,.aac" hidden><button type="button" id="attach-button" class="voice" aria-label="Attach a study file or image" title="Attach a study file or image">＋</button><textarea id="prompt" rows="1" placeholder="Message Amiir AI"></textarea><button type="button" id="voice-button" class="voice" aria-label="Record a voice question" title="Record a voice question">🎙</button><button type="button" id="stop-button" aria-label="Stop waiting for response" title="Stop waiting for response">■</button><button type="submit" id="send-button" aria-label="Send message" title="Send">↑</button></form>
       <label class="speak-toggle"><input type="checkbox" id="auto-speak"> Speak replies aloud</label>
     </div>
   </main>
@@ -331,7 +364,15 @@
     enterSetting.addEventListener('change', () => localStorage.setItem('offlineAiEnterToSend', String(enterSetting.checked)));
     speakSetting.addEventListener('change', () => { autoSpeak.checked = speakSetting.checked; localStorage.setItem('offlineAiSpeakReplies', String(speakSetting.checked)); });
     reducedMotionSetting.addEventListener('change', () => { localStorage.setItem('offlineAiReducedMotion', String(reducedMotionSetting.checked)); applyPreferences(); });
-    document.querySelector('#reset-settings').addEventListener('click', () => { for (const key of ['offlineAiTheme','offlineAiAccent','offlineAiTextSize','offlineAiEnterToSend','offlineAiSpeakReplies','offlineAiReducedMotion']) localStorage.removeItem(key); autoSpeak.checked = false; applyPreferences(); settingsStatus.textContent = 'Preferences reset to defaults.'; });
+    document.querySelector('#reset-settings').addEventListener('click', () => {
+      for (const key of ['offlineAiTheme','offlineAiAccent','offlineAiTextSize','offlineAiEnterToSend','offlineAiSpeakReplies','offlineAiReducedMotion','amiirSidebarCollapsed']) localStorage.removeItem(key);
+      appSidebar.classList.remove('collapsed');
+      desktopSidebarToggle.setAttribute('aria-label','Collapse sidebar');
+      desktopSidebarToggle.title='Collapse sidebar';
+      autoSpeak.checked = false;
+      applyPreferences();
+      settingsStatus.textContent = 'Preferences reset to defaults.';
+    });
     document.querySelector('#export-chats').addEventListener('click', async () => {
       try {
         settingsStatus.textContent = 'Preparing export…';
@@ -408,6 +449,7 @@
     const composer = document.querySelector('.composer-wrap');
     const createPanel = document.querySelector('#create-panel');
     const settingsPanel = document.querySelector('#settings-panel');
+    const appSidebar = document.querySelector('#app-sidebar');
     function setView(view) {
       const create = view === 'create';
       const settings = view === 'settings';
@@ -419,11 +461,18 @@
       document.querySelector('#create-tab').classList.toggle('active', create);
       document.querySelector('#settings-tab').classList.toggle('active', settings);
     }
+    const desktopSidebarToggle = document.querySelector('#desktop-sidebar-toggle');
+    desktopSidebarToggle.addEventListener('click', () => {
+      const collapsed = appSidebar.classList.toggle('collapsed');
+      desktopSidebarToggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      desktopSidebarToggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+      localStorage.setItem('amiirSidebarCollapsed', String(collapsed));
+    });
+    if (localStorage.getItem('amiirSidebarCollapsed') === 'true' && matchMedia('(min-width: 761px)').matches) appSidebar.classList.add('collapsed');
     document.querySelector('#chat-tab').addEventListener('click', () => setView('chat'));
     document.querySelector('#create-tab').addEventListener('click', () => setView('create'));
     document.querySelector('#new-chat-tab').addEventListener('click', async () => { try { await createNewChat(); } catch (error) { voiceStatus.textContent = error.message; } });
     document.querySelector('#settings-tab').addEventListener('click', () => setView('settings'));
-    const appSidebar = document.querySelector('#app-sidebar');
     const sidebarBackdrop = document.querySelector('#sidebar-backdrop');
     const menuToggle = document.querySelector('#menu-toggle');
     function closeSidebar() { appSidebar.classList.remove('open'); sidebarBackdrop.classList.remove('open'); menuToggle.setAttribute('aria-expanded', 'false'); }
@@ -440,6 +489,12 @@
       historyTab.setAttribute('aria-expanded', String(expanded));
       if (expanded) document.querySelector('#chat-tab').classList.remove('active');
     });
+    document.querySelector('#history-search').addEventListener('input', () => refreshConversationList().catch(error => { voiceStatus.textContent=error.message; }));
+    document.querySelectorAll('[data-starter]').forEach(button => button.addEventListener('click', () => {
+      input.value = button.dataset.starter;
+      input.focus();
+      input.dispatchEvent(new Event('input', {bubbles:true}));
+    }));
     document.querySelectorAll('[data-create-tool]').forEach(button => button.addEventListener('click', () => {
       const motion = button.dataset.createTool === 'motion';
       document.querySelector('#image-tool').hidden = motion;
@@ -476,7 +531,7 @@
       document.querySelector('#account-details').hidden = false;
       document.querySelector('#account-contact-label').textContent = signup ? 'Email address' : 'Email or phone number';
       document.querySelector('#account-contact').placeholder = signup ? 'you@example.com' : 'Email or phone number';
-      document.querySelector('#account-submit').textContent = signup ? 'Continue with email or phone' : 'Sign in';
+      document.querySelector('#account-submit').textContent = signup ? 'Continue with email' : 'Sign in';
       document.querySelector('#account-password').autocomplete = signup ? 'new-password' : 'current-password';
       document.querySelector('#password-hint').hidden = !signup;
       document.querySelector('#password-panel').hidden = false;
@@ -582,7 +637,7 @@
     document.querySelector('#forgot-password').addEventListener('click', () => {
       accountMode = 'reset';
       document.querySelector('#account-heading').textContent = 'Reset your password';
-      document.querySelector('#account-details').textContent = 'Enter the email or phone number on your account. We will send a one-time code if it is registered.';
+      document.querySelector('#account-details').textContent = 'Enter the email address on your account. We will send a one-time code if it is registered.';
       document.querySelector('#account-details').hidden = false;
       document.querySelector('#account-tabs').hidden = true;
       document.querySelector('#password-panel').hidden = true;
@@ -796,6 +851,47 @@
       }
       speechSynthesis.speak(utterance);
     }
+    function escapeHtml(value) {
+      return value.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
+    function renderMarkdown(value) {
+      const lines = value.replace(/\r/g, '').split('\n');
+      const blocks = [];
+      let paragraph = [], list = [], code = [], inCode = false;
+      const flushParagraph = () => { if (paragraph.length) { blocks.push('<p>' + paragraph.map(line => inlineMarkdown(line)).join('<br>') + '</p>'); paragraph = []; } };
+      const flushList = () => { if (list.length) { blocks.push('<ul>' + list.map(item => '<li>' + inlineMarkdown(item) + '</li>').join('') + '</ul>'); list = []; } };
+      for (const line of lines) {
+        if (line.trim().startsWith('```')) {
+          if (inCode) { blocks.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>'); code=[]; inCode=false; }
+          else { flushParagraph(); flushList(); inCode=true; }
+          continue;
+        }
+        if (inCode) { code.push(line); continue; }
+        const heading = line.match(/^(#{1,3})\s+(.+)$/);
+        const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+        const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+        if (!line.trim()) { flushParagraph(); flushList(); continue; }
+        if (heading) { flushParagraph(); flushList(); const level=heading[1].length; blocks.push('<h'+level+'>'+inlineMarkdown(heading[2])+'</h'+level+'>'); continue; }
+        if (bullet || ordered) { flushParagraph(); list.push((bullet || ordered)[1]); continue; }
+        if (/^>\s?/.test(line)) { flushParagraph(); flushList(); blocks.push('<blockquote>'+inlineMarkdown(line.replace(/^>\s?/,''))+'</blockquote>'); continue; }
+        flushList(); paragraph.push(line);
+      }
+      if (inCode) blocks.push('<pre><code>'+escapeHtml(code.join('\n'))+'</code></pre>');
+      flushParagraph(); flushList();
+      return blocks.join('');
+    }
+    function inlineMarkdown(line) {
+      let text=escapeHtml(line);
+      text=text.replace(/`([^`]+)`/g,'<code>$1</code>');
+      text=text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>');
+      text=text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      return text;
+    }
+    function setMessageText(body, content) {
+      body.dataset.raw = content;
+      body.classList.add('markdown');
+      body.innerHTML = renderMarkdown(content);
+    }
     function showMessage(role, content, imageUrl = null, attachmentName = null) {
       welcome.hidden = true;
       const row = document.createElement('article');
@@ -805,7 +901,7 @@
       avatar.textContent = role === 'user' ? 'Y' : '✳';
       const body = document.createElement('div');
       body.className = 'message-content';
-      body.textContent = content;
+      setMessageText(body, content);
       row.append(avatar, body);
       if (imageUrl) {
         const image = document.createElement('img');
@@ -827,8 +923,10 @@
         listen.type = 'button';
         listen.className = 'speak-button';
         listen.textContent = '🔊 Listen';
-        listen.addEventListener('click', () => speakText(body.childNodes[0]?.textContent || body.textContent, listen));
-        tools.append(listen);
+        listen.addEventListener('click', () => speakText(body.dataset.raw || body.textContent, listen));
+        const copy = document.createElement('button'); copy.type='button'; copy.textContent='Copy'; copy.setAttribute('aria-label','Copy assistant response');
+        copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(body.dataset.raw || ''); copy.textContent='Copied'; setTimeout(()=>copy.textContent='Copy',1200); } catch { voiceStatus.textContent='Could not copy the response in this browser.'; } });
+        tools.append(copy, listen);
         row.append(tools);
         body.speakButton = listen;
       }
@@ -841,11 +939,14 @@
       if (!response.ok) throw new Error('Could not load chat history.');
       const data = await response.json();
       const list = document.querySelector('#history-list');
-      list.replaceChildren();
-      if (!data.conversations.length) {
-        const empty = document.createElement('div'); empty.className = 'history-empty'; empty.textContent = 'Your conversations will appear here.'; list.append(empty);
+      const search = document.querySelector('#history-search');
+      const query = search.value.trim().toLowerCase();
+      list.replaceChildren(search);
+      const filteredConversations = data.conversations.filter(conversation => (conversation.title || 'New chat').toLowerCase().includes(query));
+      if (!filteredConversations.length) {
+        const empty = document.createElement('div'); empty.className = 'history-empty'; empty.textContent = query ? 'No matching conversations.' : 'Your conversations will appear here.'; list.append(empty);
       }
-      for (const conversation of data.conversations.slice(0, 50)) {
+      for (const conversation of filteredConversations.slice(0, 50)) {
         const title = conversation.title || 'New chat';
         const row = document.createElement('div'); row.className='history-row';
         const item = document.createElement('button'); item.type='button'; item.className='history-item'; item.textContent=title; item.title=title;
@@ -913,7 +1014,14 @@
       const imageFile = attachmentFile && ['image/png', 'image/jpeg', 'image/webp'].includes(attachmentFile.type);
       if (!text && !attachmentFile) return;
       const sendButton = document.querySelector('#send-button');
+      if (document.body.classList.contains('generating')) return;
       sendButton.disabled = true;
+      document.body.classList.add('generating');
+      const requestController = new AbortController();
+      document.querySelector('#stop-button').onclick = () => {
+        voiceStatus.textContent = 'Stopped waiting. The AI service may still finish this request.';
+        requestController.abort();
+      };
       let reply = null;
       let answer = '';
       try {
@@ -931,12 +1039,14 @@
                 'Content-Type': attachmentFile.type || 'application/octet-stream',
                 'X-Attachment-Name': encodeURIComponent(attachmentFile.name)
               },
-              body: attachmentFile
+              body: attachmentFile,
+              signal: requestController.signal
             })
           : await fetch('/api/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: text, image_data: imageData, conversation_id: activeConversationId })
+              body: JSON.stringify({ message: text, image_data: imageData, conversation_id: activeConversationId }),
+              signal: requestController.signal
             });
         if (!response.ok) {
           const data = await response.json();
@@ -945,7 +1055,7 @@
         if (attachmentFile) {
           const data = await response.json();
           answer = data.answer || '';
-          reply.textContent = answer;
+          setMessageText(reply, answer);
           clearChatImage();
           await refreshConversationList();
           if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
@@ -965,7 +1075,7 @@
             if (part.error) throw new Error(part.error);
             if (part.token) {
               answer += part.token;
-              reply.textContent = answer;
+              setMessageText(reply, answer);
               document.querySelector('#chat-area').scrollTop = document.querySelector('#chat-area').scrollHeight;
             }
           }
@@ -975,11 +1085,15 @@
           const part = JSON.parse(buffer);
           if (part.error) throw new Error(part.error);
           if (part.token) answer += part.token;
-          reply.textContent = answer;
+          setMessageText(reply, answer);
         }
         if (autoSpeak.checked && answer) speakText(answer, reply.speakButton);
         await refreshConversationList();
       } catch (error) {
+        if (error.name === 'AbortError') {
+          if (reply) setMessageText(reply, answer ? answer + '\n\n_Generation stopped._' : 'Generation stopped.');
+          return;
+        }
         const message = location.protocol === 'file:'
           ? 'This page was opened as a file, so it cannot connect to the AI. Open the public site at https://amiir-ai.sulaimanaliyu2009m.workers.dev/ instead.'
           : !navigator.onLine
@@ -990,6 +1104,7 @@
         if (reply) reply.textContent = 'Error: ' + message;
         else voiceStatus.textContent = message;
       } finally {
+        document.body.classList.remove('generating');
         sendButton.disabled = false;
       }
     });

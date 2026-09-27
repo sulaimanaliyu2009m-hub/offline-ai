@@ -1,4 +1,7 @@
 const COOKIE = "offline_ai_guest";
+const ACCOUNT_COOKIE = "amiir_ai_session";
+const ACCOUNT_SESSION_SECONDS = 60 * 60 * 24 * 30;
+const PASSWORD_ITERATIONS = 310000;
 const MAX_PROMPT_CHARS = 12000;
 const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 const IMAGE_CHAT_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
@@ -23,14 +26,24 @@ function getCookie(request, name) {
   return pair ? decodeURIComponent(pair.slice(name.length + 1)) : "";
 }
 
-function ownerFor(request) {
+async function ownerFor(request, env) {
+  const accountToken = getCookie(request, ACCOUNT_COOKIE);
+  if (accountToken && env.DB) {
+    const tokenHash = await sha256Hex(accountToken);
+    const session = await env.DB.prepare(
+      "SELECT a.id, a.contact FROM account_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = ? AND s.expires_at > ?",
+    ).bind(tokenHash, Math.floor(Date.now() / 1000)).first();
+    if (session) return { id: `account:${session.id}`, loggedIn: true, username: session.contact, cookie: null };
+  }
   const existing = getCookie(request, COOKIE);
   if (existing && /^[a-f0-9-]{36}$/i.test(existing)) {
-    return { id: existing, cookie: null };
+    return { id: existing, loggedIn: false, username: "Guest", cookie: null };
   }
   const id = crypto.randomUUID();
   return {
     id,
+    loggedIn: false,
+    username: "Guest",
     cookie: `${COOKIE}=${encodeURIComponent(id)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,
   };
 }
@@ -42,8 +55,213 @@ function withCookie(response, cookie) {
   return new Response(response.body, { status: response.status, headers });
 }
 
-function ownerJson(data, owner, status = 200) {
-  return withCookie(json(data, status), owner.cookie);
+function ownerJson(data, owner, status = 200, extraCookies = []) {
+  let response = json(data, status);
+  for (const cookie of [owner.cookie, ...extraCookies].filter(Boolean)) response = withCookie(response, cookie);
+  return response;
+}
+
+function accountCookie(token, maxAge = ACCOUNT_SESSION_SECONDS) {
+  return `${ACCOUNT_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function passwordHash(password, salt) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: PASSWORD_ITERATIONS }, key, 256);
+  return [...new Uint8Array(bits)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function randomHex(size) {
+  return [...crypto.getRandomValues(new Uint8Array(size))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function otpDigest(env, contact, code) {
+  if (!env.OTP_HMAC_SECRET || env.OTP_HMAC_SECRET.length < 32) throw new Error("Email signup is not configured yet. The site operator must add an OTP_HMAC_SECRET Cloudflare secret with at least 32 characters.");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.OTP_HMAC_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const result = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${contact}:${code}`));
+  return [...new Uint8Array(result)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function constantTimeEqual(left, right) {
+  if (typeof left !== "string" || typeof right !== "string" || left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+}
+
+async function sendVerificationEmail(env, contact, code, purpose = "verify your Amiir AI account") {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+    throw new Error("Email signup needs RESEND_API_KEY and EMAIL_FROM configured in Cloudflare Worker secrets and variables.");
+  }
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: [contact],
+      subject: "Your Amiir AI verification code",
+      text: `Use ${code} to ${purpose}. This code expires in 5 minutes. If you did not request it, ignore this email.`,
+    }),
+  });
+  if (!response.ok) throw new Error("We could not send the verification email. Check the verified sender and email provider settings.");
+}
+
+async function checkAuthLimit(request, env) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const ipHash = await sha256Hex(ip);
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.prepare("DELETE FROM account_auth_attempts WHERE attempted_at < ?").bind(now - 3600).run();
+  const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_auth_attempts WHERE ip_hash = ? AND attempted_at > ?")
+    .bind(ipHash, now - 900).first();
+  if ((count?.n || 0) >= 10) return false;
+  await env.DB.prepare("INSERT INTO account_auth_attempts (ip_hash, attempted_at) VALUES (?, ?)").bind(ipHash, now).run();
+  return true;
+}
+
+function validPassword(password) {
+  return typeof password === "string" && password.length >= 8 && password.length <= 128 &&
+    /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
+}
+
+async function issueSession(env, accountId) {
+  const token = randomHex(32);
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.prepare("INSERT INTO account_sessions (token_hash, account_id, expires_at) VALUES (?, ?, ?)")
+    .bind(await sha256Hex(token), accountId, now + ACCOUNT_SESSION_SECONDS).run();
+  return token;
+}
+
+async function accountRoute(request, env, owner, action) {
+  if (!env.DB) return ownerJson({ error: "The chat database is not connected yet." }, owner, 503);
+  if (["signup", "verify", "resend", "reset-start", "reset-resend", "reset-verify"].includes(action) &&
+      (!env.OTP_HMAC_SECRET || env.OTP_HMAC_SECRET.length < 32)) {
+    return ownerJson({ error: "Email verification is not configured yet. The site operator must add an OTP_HMAC_SECRET Cloudflare secret with at least 32 characters." }, owner, 503);
+  }
+  if (!await checkAuthLimit(request, env)) return ownerJson({ error: "Too many account attempts. Wait 15 minutes and try again." }, owner, 429);
+  const bodyText = await request.text();
+  if (bodyText.length > 5000) return ownerJson({ error: "Account request is too large." }, owner, 413);
+  let body;
+  try { body = JSON.parse(bodyText); } catch { body = null; }
+  if (!body || typeof body !== "object") return ownerJson({ error: "Enter valid account details." }, owner, 400);
+  const contact = typeof body.contact === "string" ? body.contact.trim().toLowerCase() : "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact) || contact.length > 254) {
+    return ownerJson({ error: "Enter a valid email address." }, owner, 400);
+  }
+  const now = Math.floor(Date.now() / 1000);
+
+  if (action === "signup") {
+    if (!validPassword(body.password)) return ownerJson({ error: "Password must be 8–128 characters and include uppercase and lowercase letters, a number, and a symbol." }, owner, 400);
+    const exists = await env.DB.prepare("SELECT id FROM accounts WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    if (exists) return ownerJson({ error: "That email is already registered. Try signing in." }, owner, 409);
+    const prior = await env.DB.prepare("SELECT sent_at FROM signup_otps WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    if (prior && now - prior.sent_at < 60) return ownerJson({ error: "Wait 60 seconds before requesting another code." }, owner, 429);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const saltHex = [...salt].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+    const hash = await passwordHash(body.password, salt);
+    await env.DB.prepare("INSERT OR REPLACE INTO signup_otps (contact, otp_hash, password_salt, password_hash, expires_at, sent_at, attempts) VALUES (?, ?, ?, ?, ?, ?, 0)")
+      .bind(contact, await otpDigest(env, contact, code), saltHex, hash, now + 300, now).run();
+    try { await sendVerificationEmail(env, contact, code); }
+    catch (error) {
+      await env.DB.prepare("DELETE FROM signup_otps WHERE contact = ? COLLATE NOCASE").bind(contact).run();
+      return ownerJson({ error: error.message }, owner, 503);
+    }
+    return ownerJson({ ok: true, message: "Verification code sent. Enter it within 5 minutes." }, owner);
+  }
+
+  if (action === "verify" || action === "resend") {
+    let pending = await env.DB.prepare("SELECT * FROM signup_otps WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    if (action === "resend") {
+      if (!pending || pending.expires_at < now) return ownerJson({ error: "That signup code expired. Start signup again." }, owner, 400);
+      if (now - pending.sent_at < 60) return ownerJson({ error: "Wait 60 seconds before requesting another code." }, owner, 429);
+      const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+      await env.DB.prepare("UPDATE signup_otps SET otp_hash = ?, expires_at = ?, sent_at = ?, attempts = 0 WHERE contact = ? COLLATE NOCASE")
+        .bind(await otpDigest(env, contact, code), now + 300, now, contact).run();
+      try { await sendVerificationEmail(env, contact, code); }
+      catch {
+        await env.DB.prepare("DELETE FROM signup_otps WHERE contact = ? COLLATE NOCASE").bind(contact).run();
+        return ownerJson({ error: "Could not deliver the verification code. Check email settings." }, owner, 503);
+      }
+      return ownerJson({ ok: true, message: "A new code was sent. It expires in 5 minutes." }, owner);
+    }
+    if (!pending || pending.expires_at < now || pending.attempts >= 5) {
+      await env.DB.prepare("DELETE FROM signup_otps WHERE contact = ? COLLATE NOCASE").bind(contact).run();
+      return ownerJson({ error: "That code is invalid or expired. Start signup again." }, owner, 400);
+    }
+    if (typeof body.code !== "string" || !/^\d{6}$/.test(body.code)) return ownerJson({ error: "Enter the 6-digit code." }, owner, 400);
+    if (!constantTimeEqual(await otpDigest(env, contact, body.code), pending.otp_hash)) {
+      await env.DB.prepare("UPDATE signup_otps SET attempts = attempts + 1 WHERE contact = ? COLLATE NOCASE").bind(contact).run();
+      return ownerJson({ error: "That code is incorrect. Check it and try again." }, owner, 400);
+    }
+    const accountId = crypto.randomUUID();
+    try {
+      await env.DB.prepare("INSERT INTO accounts (id, contact, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(accountId, contact, pending.password_salt, pending.password_hash, now).run();
+    } catch { return ownerJson({ error: "That email is already registered. Try signing in." }, owner, 409); }
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM signup_otps WHERE contact = ? COLLATE NOCASE").bind(contact),
+      env.DB.prepare("UPDATE conversations SET owner_id = ? WHERE owner_id = ?").bind(`account:${accountId}`, owner.id),
+      env.DB.prepare("UPDATE messages SET owner_id = ? WHERE owner_id = ?").bind(`account:${accountId}`, owner.id),
+    ]);
+    const token = await issueSession(env, accountId);
+    return ownerJson({ ok: true, loggedIn: true, username: contact }, { ...owner, id: `account:${accountId}` }, 200, [accountCookie(token)]);
+  }
+
+  if (action === "login") {
+    if (typeof body.password !== "string" || body.password.length < 1 || body.password.length > 128) {
+      return ownerJson({ error: "Email or password is incorrect." }, owner, 401);
+    }
+    const account = await env.DB.prepare("SELECT id, contact, password_salt, password_hash FROM accounts WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    if (!account) return ownerJson({ error: "Email or password is incorrect." }, owner, 401);
+    const actual = await passwordHash(body.password, Uint8Array.from(account.password_salt.match(/.{2}/g).map((part) => parseInt(part, 16))));
+    if (!constantTimeEqual(actual, account.password_hash)) return ownerJson({ error: "Email or password is incorrect." }, owner, 401);
+    const token = await issueSession(env, account.id);
+    return ownerJson({ ok: true, loggedIn: true, username: account.contact }, owner, 200, [accountCookie(token)]);
+  }
+
+  if (action === "reset-start" || action === "reset-resend") {
+    const generic = "If an account matches that email and email delivery is configured, a reset code will arrive shortly. It expires in 5 minutes.";
+    const account = await env.DB.prepare("SELECT id FROM accounts WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    const prior = await env.DB.prepare("SELECT sent_at FROM password_reset_otps WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    if (account && (!prior || now - prior.sent_at >= 60)) {
+      const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+      await env.DB.prepare("INSERT OR REPLACE INTO password_reset_otps (contact, otp_hash, expires_at, sent_at, attempts) VALUES (?, ?, ?, ?, 0)")
+        .bind(contact, await otpDigest(env, contact, code), now + 300, now).run();
+      try { await sendVerificationEmail(env, contact, code, "reset your Amiir AI password"); }
+      catch { await env.DB.prepare("DELETE FROM password_reset_otps WHERE contact = ? COLLATE NOCASE").bind(contact).run(); }
+    }
+    return ownerJson({ ok: true, message: generic }, owner);
+  }
+
+  if (action === "reset-verify") {
+    if (!validPassword(body.password)) return ownerJson({ error: "Password must be 8–128 characters and include uppercase and lowercase letters, a number, and a symbol." }, owner, 400);
+    const pending = await env.DB.prepare("SELECT otp_hash, expires_at, attempts FROM password_reset_otps WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    if (!pending || pending.expires_at < now || pending.attempts >= 5 || typeof body.code !== "string" || !/^\d{6}$/.test(body.code)) {
+      return ownerJson({ error: "That reset code is invalid or expired. Request a new one." }, owner, 400);
+    }
+    if (!constantTimeEqual(await otpDigest(env, contact, body.code), pending.otp_hash)) {
+      await env.DB.prepare("UPDATE password_reset_otps SET attempts = attempts + 1 WHERE contact = ? COLLATE NOCASE").bind(contact).run();
+      return ownerJson({ error: "That reset code is incorrect. Check it and try again." }, owner, 400);
+    }
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const saltHex = [...salt].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const hash = await passwordHash(body.password, salt);
+    const account = await env.DB.prepare("SELECT id FROM accounts WHERE contact = ? COLLATE NOCASE").bind(contact).first();
+    if (!account) return ownerJson({ error: "That reset code is invalid or expired. Request a new one." }, owner, 400);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE accounts SET password_salt = ?, password_hash = ? WHERE id = ?").bind(saltHex, hash, account.id),
+      env.DB.prepare("DELETE FROM password_reset_otps WHERE contact = ? COLLATE NOCASE").bind(contact),
+      env.DB.prepare("DELETE FROM account_sessions WHERE account_id = ?").bind(account.id),
+    ]);
+    const token = await issueSession(env, account.id);
+    return ownerJson({ ok: true, loggedIn: true, username: contact }, owner, 200, [accountCookie(token)]);
+  }
+  return ownerJson({ error: "Account action not found." }, owner, 404);
 }
 
 async function readJson(request) {
@@ -66,10 +284,17 @@ async function routeApi(request, env, owner) {
   const method = request.method;
 
   if (path === "/api/account" && method === "GET") {
-    return ownerJson({ loggedIn: false, username: "Guest" }, owner);
+    return ownerJson({ loggedIn: Boolean(owner.loggedIn), username: owner.username || "Guest" }, owner);
   }
   if (path === "/api/account/logout" && method === "POST") {
-    return ownerJson({ ok: true }, owner);
+    const token = getCookie(request, ACCOUNT_COOKIE);
+    if (token && env.DB) await env.DB.prepare("DELETE FROM account_sessions WHERE token_hash = ?").bind(await sha256Hex(token)).run();
+    const cleared = `${ACCOUNT_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+    const guest = crypto.randomUUID();
+    return ownerJson({ ok: true, loggedIn: false, username: "Guest" }, {
+      id: guest,
+      cookie: `${COOKIE}=${guest}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,
+    }, 200, [cleared]);
   }
 
   if (!env.DB) {
@@ -345,7 +570,7 @@ async function routeApi(request, env, owner) {
   }
 
   if (path.startsWith("/api/account/") && method === "POST") {
-    return ownerJson({ error: "Accounts and email verification are not connected in this Cloudflare release. Guest chat is available." }, owner, 501);
+    return accountRoute(request, env, owner, path.slice("/api/account/".length));
   }
 
   return ownerJson({ error: "API route not found." }, owner, 404);
@@ -355,10 +580,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
-    const owner = ownerFor(request);
+    let owner;
     try {
+      owner = await ownerFor(request, env);
       return await routeApi(request, env, owner);
     } catch (error) {
+      owner ||= { id: crypto.randomUUID(), cookie: null };
       return ownerJson({ error: "The request could not be completed. Check that the D1 tables have been created." }, owner, 500);
     }
   },
