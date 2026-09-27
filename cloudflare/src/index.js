@@ -410,7 +410,8 @@ async function routeApi(request, env, owner) {
     const imageData = typeof body?.image_data === "string" ? body.image_data : "";
     let message = typeof body?.message === "string" ? body.message.trim() : "";
     const regenerate = body?.regenerate === true;
-    if (!message && !imageData && !regenerate) return ownerJson({ error: "Type a message first." }, owner, 400);
+    const replaceLast = body?.replace_last === true;
+    if ((!message && !imageData && !regenerate) || (replaceLast && !message)) return ownerJson({ error: "Type a message first." }, owner, 400);
     if (message.length > MAX_PROMPT_CHARS) return ownerJson({ error: "That message is too long. Please keep it under 12,000 characters." }, owner, 413);
     let imageBytes = null;
     if (imageData) {
@@ -426,7 +427,7 @@ async function routeApi(request, env, owner) {
 
     let conversationId = typeof body.conversation_id === "string" ? body.conversation_id : "";
     let conversation = conversationId ? await ensureConversation(env.DB, owner.id, conversationId) : null;
-    if (regenerate && (!conversation || imageData)) return ownerJson({ error: "This response cannot be regenerated. Reattach the original file or image and ask again." }, owner, 400);
+    if ((regenerate || replaceLast) && (!conversation || imageData)) return ownerJson({ error: "This response cannot be changed. Reattach the original file or image and ask again." }, owner, 400);
     if (!conversation) {
       conversationId = crypto.randomUUID();
       const now = Date.now();
@@ -440,15 +441,17 @@ async function routeApi(request, env, owner) {
     ).bind(conversationId, owner.id).all();
     const priorMessages = (prior.results || []).reverse();
     let replacedAssistantId = null;
+    let replacedUserId = null;
     let history = priorMessages.map(({ role, content }) => ({ role, content }));
-    if (regenerate) {
+    if (regenerate || replaceLast) {
       const lastAssistant = priorMessages.at(-1);
       const lastUser = priorMessages.at(-2);
       if (lastAssistant?.role !== "assistant" || lastUser?.role !== "user" || /\[Image attached|^File:/m.test(lastUser.content)) {
-        return ownerJson({ error: "This response cannot be regenerated. Reattach the original file or image and ask again." }, owner, 400);
+        return ownerJson({ error: "Only the latest text exchange can be changed." }, owner, 400);
       }
       replacedAssistantId = lastAssistant.id;
-      message = lastUser.content;
+      replacedUserId = replaceLast ? lastUser.id : null;
+      if (regenerate) message = lastUser.content;
       history = priorMessages.slice(0, -2).map(({ role, content }) => ({ role, content }));
     } else {
       const now = Date.now();
@@ -524,6 +527,7 @@ async function routeApi(request, env, owner) {
         if (!answer) return;
         const savedAt = Date.now();
         const writes = [];
+        if (replacedUserId) writes.push(env.DB.prepare("UPDATE messages SET content = ? WHERE id = ? AND owner_id = ? AND role = 'user'").bind(message, replacedUserId, owner.id));
         if (replacedAssistantId) writes.push(env.DB.prepare("DELETE FROM messages WHERE id = ? AND owner_id = ?").bind(replacedAssistantId, owner.id));
         writes.push(
           env.DB.prepare("INSERT INTO messages (id, conversation_id, owner_id, role, content, created_at) VALUES (?, ?, ?, 'assistant', ?, ?)")

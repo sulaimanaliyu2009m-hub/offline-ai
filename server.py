@@ -1505,21 +1505,23 @@ PAGE = '''<!doctype html>
             if (!response.ok) throw new Error(result.error || 'Voice transcription failed.');
             if (!result.text) throw new Error('I could not hear words clearly. Try again.');
             if (result.language) preferredVoiceLanguage = result.language;
-            voiceStatus.textContent = 'Heard: ' + result.text;
+            voiceStatus.textContent = 'Transcription added to your message. Review it, then press Send.';
             input.value = result.text;
             input.style.height = 'auto';
             input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-            form.requestSubmit();
+            input.focus();
           } catch (error) {
             voiceStatus.textContent = error.message;
           } finally {
             voiceButton.disabled = false;
             voiceButton.textContent = '🎙';
+            voiceButton.setAttribute('aria-label', 'Record a voice question');
             voiceButton.classList.remove('recording');
           }
         }, { once: true });
         recorder.start();
         voiceButton.textContent = '■';
+        voiceButton.setAttribute('aria-label', 'Stop voice recording');
         voiceButton.classList.add('recording');
         voiceStatus.textContent = 'Recording… press ■ to stop (30 second limit).';
         recordingTimer = setTimeout(() => {
@@ -2347,7 +2349,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             message = message.strip()
             regenerate = payload.get("regenerate") is True
-            if not message and not regenerate:
+            replace_last = payload.get("replace_last") is True
+            if (not message and not regenerate) or (replace_last and not message):
                 self.send_json(400, {"error": "Type a message first."})
                 return
             conversation_id = payload.get("conversation_id")
@@ -2403,12 +2406,15 @@ class Handler(BaseHTTPRequestHandler):
                     (self.request_owner, conversation_id),
                 ).fetchall()
             replaced_assistant_id = None
-            if regenerate:
+            replaced_user_id = None
+            if regenerate or replace_last:
                 if len(previous) < 2 or previous[0][1] != "assistant" or previous[1][1] != "user" or "[Image attached" in previous[1][2] or previous[1][2].startswith("File:"):
-                    self.send_json(400, {"error": "This response cannot be regenerated. Reattach the original file or image and ask again."})
+                    self.send_json(400, {"error": "Only the latest text exchange can be changed."})
                     return
                 replaced_assistant_id = previous[0][0]
-                message = previous[1][2]
+                replaced_user_id = previous[1][0] if replace_last else None
+                if regenerate:
+                    message = previous[1][2]
                 context_rows = list(reversed(previous[2:]))
             else:
                 context_rows = list(reversed(previous))
@@ -2461,8 +2467,10 @@ class Handler(BaseHTTPRequestHandler):
                             self.wfile.write(chunk)
                             self.wfile.flush()
                     answer = "".join(answer_parts)
-            if regenerate:
+            if regenerate or replace_last:
                 with sqlite3.connect(DB_PATH) as database:
+                    if replaced_user_id:
+                        database.execute("UPDATE messages SET content=? WHERE id=? AND owner_id=? AND role='user'", (message, replaced_user_id, self.request_owner))
                     database.execute("DELETE FROM messages WHERE id=? AND owner_id=? AND conversation_id=?", (replaced_assistant_id, self.request_owner, conversation_id))
                     database.execute("INSERT INTO messages(role,content,owner_id,conversation_id) VALUES('assistant',?,?,?)", (answer, self.request_owner, conversation_id))
                     database.execute("UPDATE conversations SET updated_at=? WHERE id=? AND owner_id=?", (int(datetime.now(timezone.utc).timestamp()), conversation_id, self.request_owner))
