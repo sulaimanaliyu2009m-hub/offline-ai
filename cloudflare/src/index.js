@@ -61,7 +61,22 @@ function ownerJson(data, owner, status = 200, extraCookies = []) {
   return response;
 }
 
-function apiFailure(request, owner, trace, status, code, message) {
+function providerDiagnostic(error, operation, model = null) {
+  const details = { provider: "cloudflare_workers_ai", operation };
+  if (model) details.model = model;
+  const status = error?.status ?? error?.statusCode ?? error?.response?.status;
+  if (Number.isInteger(status) && status >= 100 && status <= 599) details.providerStatus = status;
+  const code = error?.code ?? error?.error?.code;
+  if (Number.isInteger(code) && code >= 0 && code <= 999999) {
+    details.providerCode = code;
+  }
+  if (typeof error?.name === "string" && /^[a-z][a-z0-9_.-]{0,39}$/i.test(error.name)) {
+    details.providerErrorName = error.name;
+  }
+  return details;
+}
+
+function apiFailure(request, owner, trace, status, code, message, diagnostics = {}) {
   const route = new URL(request.url).pathname;
   console.error(JSON.stringify({
     event: "api_request_failed",
@@ -71,6 +86,7 @@ function apiFailure(request, owner, trace, status, code, message) {
     status,
     code,
     durationMs: Date.now() - trace.startedAt,
+    ...diagnostics,
   }));
   const response = ownerJson({ ok: false, error: message, code, requestId: trace.requestId }, owner, status);
   const headers = new Headers(response.headers);
@@ -416,7 +432,7 @@ async function routeApi(request, env, owner, trace) {
       if (!text) return ownerJson({ error: "I couldn't hear clear words in that recording. Please try again." }, owner, 422);
       return ownerJson({ text, language: result?.transcription_info?.language || "" }, owner);
     } catch (error) {
-      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "Voice transcription failed. Please try a shorter recording.");
+      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "Voice transcription failed. Please try a shorter recording.", providerDiagnostic(error, "transcribe", TRANSCRIBE_MODEL));
     }
   }
 
@@ -486,7 +502,7 @@ async function routeApi(request, env, owner, trace) {
         });
         answer = generated?.description || generated?.response || generated?.result?.response || "I couldn't analyze this image. Please try another one.";
       } catch (error) {
-        return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The image question could not be processed. Please try again.");
+        return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The image question could not be processed. Please try again.", providerDiagnostic(error, "image_chat", IMAGE_CHAT_MODEL));
       }
       const savedAt = Date.now();
       await env.DB.batch([
@@ -518,7 +534,7 @@ async function routeApi(request, env, owner, trace) {
         stream: true,
       });
     } catch (error) {
-      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The AI request could not be completed. Please try again.");
+      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The AI request could not be completed. Please try again.", providerDiagnostic(error, "chat", MODEL));
     }
     if (!modelStream || typeof modelStream.pipeThrough !== "function") {
       return apiFailure(request, owner, trace, 502, "AI_STREAM_UNAVAILABLE", "The AI service did not start a response stream. Please try again.");
@@ -589,12 +605,11 @@ async function routeApi(request, env, owner, trace) {
       }
       return ownerJson({ url: `data:image/jpeg;charset=utf-8;base64,${generated.image}` }, owner);
     } catch (error) {
-      console.error(JSON.stringify({ event: "api_request_failed", requestId: trace.requestId, route: path, method, status: 502, code: "IMAGE_PROVIDER_ERROR", durationMs: Date.now() - trace.startedAt }));
       await env.DB.batch([
         env.DB.prepare("UPDATE image_usage SET count = count - 1 WHERE day = ? AND owner_id = ? AND count > 0").bind(day, owner.id),
         env.DB.prepare("UPDATE image_usage SET count = count - 1 WHERE day = ? AND owner_id = '__global__' AND count > 0").bind(day),
       ]);
-      return ownerJson({ error: "Image generation failed. Please try again later." }, owner, 502);
+      return apiFailure(request, owner, trace, 502, "IMAGE_PROVIDER_ERROR", "Image generation failed. Please try again later.", providerDiagnostic(error, "image_generation", IMAGE_MODEL));
     }
   }
 
@@ -633,7 +648,7 @@ async function routeApi(request, env, owner, trace) {
         sourceText = document.data;
       }
     } catch (error) {
-      return apiFailure(request, owner, trace, 422, "FILE_PARSE_ERROR", "I couldn't read that file. Check that it is a supported, readable PDF or DOCX, or try a text, Markdown, or CSV file.");
+      return apiFailure(request, owner, trace, 422, "FILE_PARSE_ERROR", "I couldn't read that file. Check that it is a supported, readable PDF or DOCX, or try a text, Markdown, or CSV file.", providerDiagnostic(error, "document_conversion"));
     }
     sourceText = sourceText.trim().slice(0, 14000);
     if (!sourceText) return ownerJson({ error: "I couldn't find readable text in that file." }, owner, 422);
@@ -661,7 +676,7 @@ async function routeApi(request, env, owner, trace) {
         ? generated
         : generated?.response || generated?.result?.response || "I couldn't create a summary. Please try again.";
     } catch (error) {
-      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The AI summary failed. Please try again later.");
+      return apiFailure(request, owner, trace, 502, "AI_PROVIDER_ERROR", "The AI summary failed. Please try again later.", providerDiagnostic(error, "document_summary", MODEL));
     }
     const savedAt = Date.now();
     const storedRequest = `File: ${fileName}\nRequest: ${requestText}`;

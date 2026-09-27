@@ -148,15 +148,22 @@ test("a Workers AI provider failure returns a traceable error instead of hiding 
     body: JSON.stringify({ message: "A diagnostic test" }),
   });
   const originalError = console.error;
-  console.error = () => {};
+  const diagnostics = [];
+  console.error = (line) => diagnostics.push(JSON.parse(line));
   try {
-    const response = await worker.fetch(request, { DB: db, AI: { async run() { throw new Error("private provider details"); } } });
+    const providerError = Object.assign(new Error("private provider details"), { status: 429, code: 3036 });
+    const response = await worker.fetch(request, { DB: db, AI: { async run() { throw providerError; } } });
     const body = await response.json();
     assert.equal(response.status, 502);
     assert.equal(body.code, "AI_PROVIDER_ERROR");
     assert.ok(body.requestId);
     assert.equal(response.headers.get("x-request-id"), body.requestId);
     assert.doesNotMatch(JSON.stringify(body), /private provider details/);
+    assert.equal(diagnostics[0].provider, "cloudflare_workers_ai");
+    assert.equal(diagnostics[0].operation, "chat");
+    assert.equal(diagnostics[0].providerStatus, 429);
+    assert.equal(diagnostics[0].providerCode, 3036);
+    assert.doesNotMatch(JSON.stringify(diagnostics), /private provider details/);
   } finally {
     console.error = originalError;
   }
