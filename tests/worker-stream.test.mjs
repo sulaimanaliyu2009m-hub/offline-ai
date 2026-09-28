@@ -546,3 +546,28 @@ test("the document endpoint returns a specific unsupported-type error", async ()
   assert.equal(response.status, 415);
   assert.match(body.error, /not supported/);
 });
+
+test("the document endpoint rejects text beyond the summary limit instead of silently truncating it", async () => {
+  let aiCalled = false;
+  const db = {
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async first() { return null; },
+      };
+    },
+  };
+  const response = await worker.fetch(new Request("https://example.test/api/summarize-file", {
+    method: "POST",
+    headers: { "content-type": "text/plain", "x-attachment-name": "long-notes.txt" },
+    body: "x".repeat(14001),
+  }), {
+    DB: db,
+    AI: { async run() { aiCalled = true; return { response: "unexpected" }; } },
+  });
+  const body = await response.json();
+  assert.equal(response.status, 413);
+  assert.equal(body.code, "FILE_TOO_LARGE");
+  assert.match(body.error, /Split it into smaller sections/);
+  assert.equal(aiCalled, false);
+});
