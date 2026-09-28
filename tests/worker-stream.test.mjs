@@ -571,3 +571,68 @@ test("the document endpoint rejects text beyond the summary limit instead of sil
   assert.match(body.error, /Split it into smaller sections/);
   assert.equal(aiCalled, false);
 });
+
+test("voice transcription calls the configured Workers AI model and returns its transcript", async () => {
+  const db = {
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async first() { return sql.includes("INSERT INTO ai_rate_limits") ? { request_count: 1 } : null; },
+      };
+    },
+  };
+  const audioBytes = new Uint8Array([0, 1, 2, 253, 254, 255]);
+  let called = false;
+  const response = await worker.fetch(new Request("https://example.test/api/transcribe", {
+    method: "POST",
+    headers: { "content-type": "audio/webm", "CF-Connecting-IP": "203.0.113.12" },
+    body: audioBytes,
+  }), {
+    DB: db,
+    AI: { async run(model, options) {
+      called = true;
+      assert.equal(model, "@cf/openai/whisper-large-v3-turbo");
+      assert.equal(options.audio, btoa(String.fromCharCode(...audioBytes)));
+      assert.equal(options.task, "transcribe");
+      return { text: "  Review the main idea.  ", transcription_info: { language: "en" } };
+    } },
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual(body, { text: "Review the main idea.", language: "en" });
+  assert.equal(called, true);
+});
+
+test("image generation applies quotas and returns real model output as an image URL", async () => {
+  const db = {
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async first() {
+          if (sql.includes("INSERT INTO ai_rate_limits")) return { request_count: 1 };
+          if (sql.includes("INSERT INTO image_usage")) return { count: 1 };
+          return null;
+        },
+        async run() { return { success: true }; },
+      };
+    },
+  };
+  let called = false;
+  const response = await worker.fetch(new Request("https://example.test/api/generate-image", {
+    method: "POST",
+    headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.13" },
+    body: JSON.stringify({ prompt: "A small red kite in a blue sky" }),
+  }), {
+    DB: db,
+    AI: { async run(model, options) {
+      called = true;
+      assert.equal(model, "@cf/black-forest-labs/flux-1-schnell");
+      assert.deepEqual(options, { prompt: "A small red kite in a blue sky", steps: 4 });
+      return { image: "aGVsbG8=" };
+    } },
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.url, "data:image/jpeg;charset=utf-8;base64,aGVsbG8=");
+  assert.equal(called, true);
+});
