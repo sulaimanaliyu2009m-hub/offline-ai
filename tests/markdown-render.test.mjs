@@ -27,3 +27,24 @@ test("Code blocks are labeled, copyable, highlighted, and HTML-escaped", () => {
   assert.match(output, /&lt;script&gt;/);
   assert.doesNotMatch(output, /<script>alert/);
 });
+
+const streamStart = html.indexOf("    async function readChatResponseStream(");
+const streamEnd = html.indexOf("    async function regenerateAssistant(", streamStart);
+assert.ok(streamStart >= 0 && streamEnd > streamStart, "Chat stream reader exists in the app page");
+const streamReader = { TextDecoder };
+vm.runInNewContext(html.slice(streamStart, streamEnd), streamReader, { timeout: 1000 });
+
+test("Chat stream reader renders Workers AI and OpenAI-compatible delta payloads", async () => {
+  for (const data of [
+    { response: "Workers AI" },
+    { result: { response: "wrapped Workers AI" } },
+    { choices: [{ delta: { content: "OpenAI-compatible" } }] },
+  ]) {
+    const response = new Response(`data: ${JSON.stringify(data)}\n\ndata: [DONE]\n\n`, {
+      headers: { "content-type": "text/event-stream" },
+    });
+    let rendered = "";
+    await streamReader.readChatResponseStream(response, token => { rendered += token; });
+    assert.equal(rendered, data.response || data.result?.response || data.choices[0].delta.content);
+  }
+});

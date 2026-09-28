@@ -1784,7 +1784,10 @@
         if(!payload||payload==='[DONE]')return;
         const part=JSON.parse(payload);
         if(part.error)throw new Error(part.error);
-        const token=typeof part.token==='string'?part.token:typeof part.response==='string'?part.response:'';
+        const token=typeof part.token==='string'?part.token
+          :typeof part.response==='string'?part.response
+          :typeof part.result?.response==='string'?part.result.response
+          :typeof part.choices?.[0]?.delta?.content==='string'?part.choices[0].delta.content:'';
         if(token)onToken(token);
       };
       while(true){
@@ -1934,6 +1937,7 @@
           setMessageText(reply,answer);
           chatArea.scrollTop=chatArea.scrollHeight;
         });
+        if(!answer.trim())throw new Error('The AI returned an empty response. Please try again.');
         if (temporaryChat) {
           temporaryMessages.push({ role:'user', content:shownText }, { role:'assistant', content:answer });
           temporaryMessages = temporaryMessages.slice(-14);
